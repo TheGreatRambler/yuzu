@@ -42,6 +42,10 @@ struct CheatEntry;
 class Memory;
 } // namespace Core::Memory
 
+namespace Tools {
+class PluginManager;
+} // namespace Tools
+
 namespace Service {
 
 namespace AM::Applets {
@@ -303,6 +307,12 @@ public:
 
     /// Provides a constant referent to the frame limiter
     const Core::FrameLimiter& FrameLimiter() const;
+
+    /// Provides a reference to the plugin manager.
+    Tools::PluginManager& PluginManager();
+
+    /// Provides a constant referent to the plugin manager.
+    const Tools::PluginManager& PluginManager() const;
 
     /// Gets the name of the current game
     Loader::ResultStatus GetGameName(std::string& out) const;

@@ -49,6 +49,7 @@
 #include "core/settings.h"
 #include "core/telemetry_session.h"
 #include "core/tools/freezer.h"
+#include "core/tools/plugin_manager.h"
 #include "video_core/renderer_base.h"
 #include "video_core/video_core.h"
 
@@ -189,6 +190,8 @@ struct System::Impl {
             return ResultStatus::ErrorVideoCore;
         }
         gpu_core->Renderer().Rasterizer().SetupDirtyFlags();
+
+        plugin_manager = std::make_unique<Tools::PluginManager>(core_timing, memory, system);
 
         is_powered_on = true;
         exit_lock = false;
@@ -377,6 +380,7 @@ struct System::Impl {
     Reporter reporter;
     std::unique_ptr<Memory::CheatEngine> cheat_engine;
     std::unique_ptr<Tools::Freezer> memory_freezer;
+    std::unique_ptr<Tools::PluginManager> plugin_manager;
     std::array<u8, 0x20> build_id{};
 
     /// Frontend applets
@@ -612,6 +616,14 @@ Core::FrameLimiter& System::FrameLimiter() {
 
 const Core::FrameLimiter& System::FrameLimiter() const {
     return impl->frame_limiter;
+}
+
+Tools::PluginManager& PluginManager() {
+    return *impl->plugin_manager;
+}
+
+const Tools::PluginManager& PluginManager() const {
+    return *impl->plugin_manager;
 }
 
 Loader::ResultStatus System::GetGameName(std::string& out) const {
