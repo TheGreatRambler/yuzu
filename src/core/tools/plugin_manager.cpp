@@ -9,11 +9,12 @@
 #include "core/core_timing_util.h"
 #include "core/cpu_manager.h"
 #include "core/hardware_properties.h"
+#include "core/hle/kernel/process.h"
+#include "core/loader/loader.h"
 #include "core/memory.h"
 #include "core/settings.h"
-#include "core/tools/plugin_definitions.hpp"
+#include "core/tools/plugin_definitions.h"
 #include "core/tools/plugin_manager.h"
-#include "yuzu/configuration/config.h"
 
 namespace Tools {
 namespace {
@@ -94,10 +95,6 @@ bool PluginManager::IsActive() const {
     return active.load(std::memory_order_relaxed);
 }
 
-void PluginManager::SetConfigInstance(Config& config) {
-    configuration = config;
-}
-
 void PluginManager::ProcessScript(std::shared_ptr<Plugin> plugin) {
     {
         std::lock_guard<std::mutex> lk(plugin->pluginMutex);
@@ -109,7 +106,7 @@ void PluginManager::ProcessScript(std::shared_ptr<Plugin> plugin) {
         // Gain back control
         std::unique_lock<std::mutex> lk(plugin->pluginMutex);
         plugin->pluginCv.wait(
-            lk, [this] { return plugin->processedMainLoop || plugin->encounteredVsync; });
+            lk, [plugin] { return plugin->processedMainLoop || plugin->encounteredVsync; });
 
         if (plugin->processedMainLoop.load(std::memory_order_relaxed)) {
             // This main loop is done
@@ -122,7 +119,7 @@ void PluginManager::ProcessScript(std::shared_ptr<Plugin> plugin) {
 }
 
 void PluginManager::ProcessScriptFromIdle() {
-    while (auto& plugin : plugins) {
+    for (auto& plugin : plugins) {
         if (!plugin->encounteredVsync.load(std::memory_order_relaxed)) {
             // Create thread for every main loop function
             plugin->encounteredVsync = false;
@@ -142,7 +139,7 @@ void PluginManager::ProcessScriptFromIdle() {
 }
 
 void PluginManager::ProcessScriptFromVsync() {
-    while (auto& plugin : plugins) {
+    for (auto& plugin : plugins) {
         if (plugin->encounteredVsync.load(std::memory_order_relaxed)) {
             // Continue thread from the vsync event
             plugin->encounteredVsync = false;
@@ -165,20 +162,6 @@ void PluginManager::PluginThreadExecuter(std::shared_ptr<Plugin> plugin) {
         plugin->processedMainLoop = true;
         plugin->pluginCv.notify_one();
     }
-}
-
-void PluginManager::waitForVsync(void* pluginInstance) {
-    Plugin* self = (Plugin*)pluginInstance;
-
-    // Notify main thread a vsync event is now being waited for
-    self->encounteredVsync = true;
-    self->pluginCv.notify_one();
-
-    // Block until main thread has reached vsync
-    std::unique_lock<std::mutex> lk(self->pluginMutex);
-    self->pluginCv.wait(lk, [this, self] { return self->ready; });
-    self->ready = false;
-    // Once this is done, execution will resume as normal
 }
 
 std::string PluginManager::GetLastDllError() {
@@ -221,8 +204,8 @@ bool PluginManager::LoadPlugin(std::string path) {
         return false;
     }
 
-    meta_getplugininterfaceversion* pluginVersion =
-        GetDllFunction<PluginDefinitions::get_plugin_interface_version>(
+    PluginDefinitions::meta_getplugininterfaceversion* pluginVersion =
+        GetDllFunction<PluginDefinitions::meta_getplugininterfaceversion>(
             *plugin, "get_plugin_interface_version");
 
     if (!pluginVersion || pluginVersion() > PLUGIN_INTERFACE_VERSION) {
@@ -230,10 +213,10 @@ bool PluginManager::LoadPlugin(std::string path) {
         return false;
     }
 
-    meta_setup_plugin* setup =
+    PluginDefinitions::meta_setup_plugin* setup =
         GetDllFunction<PluginDefinitions::meta_setup_plugin>(*plugin, "startPlugin");
 
-    meta_handle_main_loop* mainLoop =
+    PluginDefinitions::meta_handle_main_loop* mainLoop =
         GetDllFunction<PluginDefinitions::meta_handle_main_loop>(*plugin, "handleMainLoop");
 
     if (!setup || !mainLoop) {
@@ -241,7 +224,7 @@ bool PluginManager::LoadPlugin(std::string path) {
         return false;
     }
 
-    plugin->system = system;
+    plugin->system = &system;
 
     setup(plugin.get());
 
@@ -251,46 +234,61 @@ bool PluginManager::LoadPlugin(std::string path) {
 void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
     // For every function in plugin_definitions.hpp
     // Can use lambdas
-    meta_add_function* func;
+    PluginDefinitions::meta_add_function* func;
 
     ADD_FUNCTION_TO_PLUGIN(meta_free, [](void* ptr) -> void {
         // The plugin might have a different allocater
         free(ptr);
     })
 
-    ADD_FUNCTION_TO_PLUGIN(emu_frameadvance, &PluginManager::waitForVsync);
+    ADD_FUNCTION_TO_PLUGIN(emu_frameadvance, [](void* pluginInstance) -> void {
+        Plugin* self = (Plugin*)pluginInstance;
+
+        // Notify main thread a vsync event is now being waited for
+        self->encounteredVsync = true;
+        self->pluginCv.notify_one();
+
+        // Block until main thread has reached vsync
+        std::unique_lock<std::mutex> lk(self->pluginMutex);
+        self->pluginCv.wait(lk, [self] { return self->ready; });
+        self->ready = false;
+        // Once this is done, execution will resume as normal
+    });
+
     ADD_FUNCTION_TO_PLUGIN(emu_pause, [](void* pluginInstance) -> void {
         Plugin* self = (Plugin*)pluginInstance;
-        self->system.Pause();
+        self->system->Pause();
     })
+
     ADD_FUNCTION_TO_PLUGIN(emu_unpause, [](void* pluginInstance) -> void {
         Plugin* self = (Plugin*)pluginInstance;
-        self->system.Run();
+        self->system->Run();
     })
     // ADD_FUNCTION_TO_PLUGIN(emu_message)
     // ADD_FUNCTION_TO_PLUGIN(emu_framecount)
     ADD_FUNCTION_TO_PLUGIN(emu_emulating, [](void* pluginInstance) -> uint8_t {
         Plugin* self = (Plugin*)pluginInstance;
-        return self->system.CurrentProcess()->GetStatus() == Kernel::ProcessStatus::Running;
+        return self->system->CurrentProcess()->GetStatus() == Kernel::ProcessStatus::Running;
     })
     ADD_FUNCTION_TO_PLUGIN(emu_romname, [](void* pluginInstance) -> char* {
         Plugin* self = (Plugin*)pluginInstance;
         std::string name;
-        if (self->system.GetGameName(name) == System::ResultStatus::Success) {
+        if (self->system->GetGameName(name) == Loader::ResultStatus::Success) {
             return GetAllocatedString(name);
         } else {
-            return NULL
+            return NULL;
         }
     })
     ADD_FUNCTION_TO_PLUGIN(emu_getprogramid, [](void* pluginInstance) -> uint64_t {
         Plugin* self = (Plugin*)pluginInstance;
         uint64_t id;
-        if (self->system.GetAppLoader().ReadProgramId(id) != Loader::ResultStatus::Success) {
-            return NULL
+        if (self->system->GetAppLoader().ReadProgramId(id) != Loader::ResultStatus::Success) {
+            return NULL;
         } else {
             return id;
         }
     })
+    /*
     ADD_FUNCTION_TO_PLUGIN(emu_getprocessid)
     ADD_FUNCTION_TO_PLUGIN(emu_getheapstart)
     ADD_FUNCTION_TO_PLUGIN(emu_getmainstart)
@@ -302,6 +300,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
     ADD_FUNCTION_TO_PLUGIN(joypad_readjoystick)
     ADD_FUNCTION_TO_PLUGIN(joypad_read)
     ADD_FUNCTION_TO_PLUGIN(rom_readbytes)
+    */
 }
 
 /*

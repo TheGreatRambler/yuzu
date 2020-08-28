@@ -599,6 +599,9 @@ add_library(core STATIC
     telemetry_session.h
     tools/freezer.cpp
     tools/freezer.h
+    tools/plugin_definitions.h
+    tools/plugin_manager.cpp
+    tools/plugin_manager.h
 )
 
 if (MSVC)

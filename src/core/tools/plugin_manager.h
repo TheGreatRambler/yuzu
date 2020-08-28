@@ -7,7 +7,7 @@
 #define ADD_FUNCTION_TO_PLUGIN(type, address)                                                      \
     func = GetDllFunction<PluginDefinitions::meta_add_function>(*plugin, "yuzupluginset_" #type);  \
     if (func)                                                                                      \
-        func(address);                                                                             \
+        func((void*)((PluginDefinitions::type*)address));                                          \
     func = nullptr;
 
 #include <atomic>
@@ -38,9 +38,19 @@ namespace Core {
 class System;
 } // namespace Core
 
+namespace Kernel {
+class Process;
+} // namespace Kernel
+
+namespace Loader {
+enum class ResultStatus : u16;
+} // namespace Loader
+
 namespace QSettings {
 class Config;
 } // namespace QSettings
+
+class Config;
 
 struct Plugin {
     bool ready{false};
@@ -51,7 +61,7 @@ struct Plugin {
     std::unique_ptr<std::thread> pluginThread;
     bool pluginAvailable;
     Tools::PluginManager* pluginManager;
-    Core::System& system;
+    Core::System* system;
 #ifdef _WIN32
     HMODULE sharedLibHandle;
 #endif
@@ -82,8 +92,6 @@ public:
     void ProcessScript(std::shared_ptr<Plugin> plugin);
     void ProcessScriptFromIdle();
     void ProcessScriptFromVsync();
-
-    void SetConfigInstance(Config& config);
 
     /*
         // Removes all entries from the freezer.
@@ -123,7 +131,7 @@ private:
 
     std::string GetLastDllError();
 
-    char* GetAllocatedString(std::string& str) {
+    static char* GetAllocatedString(std::string& str) {
         // Get allocated version of a string that must be freed
         char* buf = (char*)malloc(str.size() + 1);
         std::copy(str.begin(), str.end(), buf);
@@ -134,7 +142,7 @@ private:
     template <typename T>
     T* GetDllFunction(Plugin& plugin, std::string name) {
 #ifdef _WIN32
-        return GetProcAddress(plugin.sharedLibHandle, name.c_str());
+        return (T*)GetProcAddress(plugin.sharedLibHandle, name.c_str());
 #endif
 #if defined(__linux__) || defined(__APPLE__)
         return dlsym(plugin.sharedLibHandle, name.c_str());
@@ -146,9 +154,6 @@ private:
 
     void PluginThreadExecuter(std::shared_ptr<Plugin> plugin);
 
-    // All builtin plugin functions
-    static void waitForVsync(void* pluginInstance);
-
     std::atomic_bool active{false};
 
     // Possibly combine all these into a vector for multiple plugins
@@ -157,7 +162,7 @@ private:
     // std::shared_ptr<Core::Timing::EventType> event;
     Core::Timing::CoreTiming& core_timing;
     Core::Memory::Memory& memory;
-    QSettings::Config& configuration;
+    Core::System& system;
 };
 
 } // namespace Tools

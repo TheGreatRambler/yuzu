@@ -618,11 +618,11 @@ const Core::FrameLimiter& System::FrameLimiter() const {
     return impl->frame_limiter;
 }
 
-Tools::PluginManager& PluginManager() {
+Tools::PluginManager& System::PluginManager() {
     return *impl->plugin_manager;
 }
 
-const Tools::PluginManager& PluginManager() const {
+const Tools::PluginManager& System::PluginManager() const {
     return *impl->plugin_manager;
 }
 

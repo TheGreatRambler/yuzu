@@ -7,7 +7,7 @@
 
 namespace PluginDefinitions {
 
-enum YuzuJoystickType : uint8_t {
+enum class YuzuJoystickType : uint8_t {
     LeftX = 0,
     LeftY = 1,
     RightX = 2,
@@ -15,7 +15,7 @@ enum YuzuJoystickType : uint8_t {
 };
 
 // Lifted from settings.h
-enum ButtonValues : uint8_t {
+enum class ButtonValues : uint8_t {
     A,
     B,
     X,
@@ -53,14 +53,14 @@ enum ButtonValues : uint8_t {
     NumButtons,
 };
 
-enum ControllerType : uint8_t {
+enum class ControllerType : uint8_t {
     ProController,
     DualJoycon,
     RightJoycon,
     LeftJoycon,
 };
 
-enum KeyboardValues : uint8_t {
+enum class KeyboardValues : uint8_t {
     None,
     Error,
 
@@ -237,7 +237,7 @@ enum KeyboardValues : uint8_t {
     NumKeyboardKeys,
 };
 
-enum KeyboardModifiers : uint8_t {
+enum class KeyboardModifiers : uint8_t {
     LeftControl,
     LeftShift,
     LeftAlt,
