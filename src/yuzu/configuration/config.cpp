@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #include <array>
+#include <functional>
 #include <QKeySequence>
 #include <QSettings>
 #include "common/file_util.h"

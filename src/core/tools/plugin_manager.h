@@ -11,6 +11,7 @@
     func = nullptr;
 
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -49,8 +50,6 @@ enum class ResultStatus : u16;
 namespace QSettings {
 class Config;
 } // namespace QSettings
-
-class Config;
 
 struct Plugin {
     bool ready{false};
@@ -156,10 +155,8 @@ private:
 
     std::atomic_bool active{false};
 
-    // Possibly combine all these into a vector for multiple plugins
     std::vector<std::shared_ptr<Plugin>> plugins;
 
-    // std::shared_ptr<Core::Timing::EventType> event;
     Core::Timing::CoreTiming& core_timing;
     Core::Memory::Memory& memory;
     Core::System& system;

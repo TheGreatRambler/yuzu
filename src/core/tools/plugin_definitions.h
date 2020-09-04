@@ -253,6 +253,43 @@ enum class KeyboardModifiers : uint8_t {
     NumKeyboardMods,
 };
 
+enum class MouseButton : int32_t {
+    Left,
+    Right,
+    Middle,
+    Forward,
+    Back,
+};
+
+enum class TouchTypes : uint8_t {
+    X,
+    Y,
+    DiameterX,
+    DiameterY,
+    RotationAngle,
+};
+
+enum class SixAxisMotionTypes : uint8_t {
+    AccelerationX,
+    AccelerationY,
+    AccelerationZ,
+    AngularVelocityX,
+    AngularVelocityY,
+    AngularVelocityZ,
+    AngleX,
+    AngleY,
+    AngleZ,
+    DirectionXX,
+    DirectionXY,
+    DirectionXZ,
+    DirectionYX,
+    DirectionYY,
+    DirectionYZ,
+    DirectionZX,
+    DirectionZY,
+    DirectionZZ,
+};
+
 // NOTE: Every time a char string is returned, it must be freed by the DLL
 
 typedef void(meta_setup_plugin)(void*);
@@ -274,7 +311,7 @@ typedef void(emu_unpause)(void* ctx);
 // emu.exec_count(int count, function func) ignored
 // emu.exec_time(int time, function func) ignored
 // emu.setrenderplanes(bool sprites, bool background) ignored
-typedef void(emu_message)(void* ctx, char* mode);
+typedef void(emu_message)(void* ctx, const char* mode);
 typedef int(emu_framecount)(void* ctx);
 // int emu.lagcount() ignored
 // bool emu.lagged()
@@ -284,7 +321,7 @@ typedef uint8_t(emu_paused)(void* ctx);
 // bool emu.readonly() ignored
 // emu.setreadonly(bool state) ignored
 typedef char*(emu_getdir)(void* ctx);
-typedef void(emu_loadrom)(void* ctx, char* filename);
+typedef void(emu_loadrom)(void* ctx, const char* filename);
 // emu.registerbefore(function func) handled outside of Yuzu
 // emu.registerafter(function func) handled outside of Yuzu
 // emu.registerexit(function func) handled outside of Yuzu
@@ -349,17 +386,18 @@ typedef uint64_t(joypad_immediate)(void* ctx, uint8_t player);
 // table joypad.readup(int player) ignored
 typedef void(joypad_set)(void* ctx, uint8_t player, uint64_t input);
 
-// Joystick, accel and gyro based on enums
 typedef int16_t(joypad_readjoystick)(void* ctx, uint8_t player, YuzuJoystickType type);
-// Joystick, accel and gyro based on enums
 typedef void(joypad_setjoystick)(void* ctx, uint8_t player, YuzuJoystickType type, int16_t val);
-// Disable input entering from outside the script, this allows the script to set input without
-// interruption
-typedef void(joypad_enableoutsideinput)(void* ctx, uint8_t enable);
-// Set number of joysticks in use, will reset all controllers and replace them
-typedef void(joypad_setnumjoypads)(void* ctx, uint8_t numofplayers);
+
+typedef float(joypad_readsixaxis)(void* ctx, uint8_t player, SixAxisMotionTypes type);
+typedef void(joypad_setsixaxis)(void* ctx, uint8_t player, SixAxisMotionTypes type, float val);
+
 // Add controllers
-typedef void(joypad_addjoypad)(void* ctx);
+typedef void(joypad_addjoypad)(void* ctx, ControllerType type);
+// Remove all controllers
+typedef void(joypad_removealljoypads)(void* ctx);
+// Set controller type at index
+typedef void(joypad_setjoypadtype)(void* ctx, uint8_t player, ControllerType type);
 // Get number of controllers
 typedef uint8_t(joypad_getnumjoypads)(void* ctx);
 
@@ -369,8 +407,28 @@ typedef uint8_t(joypad_getnumjoypads)(void* ctx);
 // table input.read() ignored
 // string input.popup ignored
 
-// Keyboard machanism based on enums
-typedef uint8_t(input_ispressed)(void* ctx, uint8_t key);
+typedef void(input_enablekeyboard)(void* ctx, uint8_t enable);
+typedef void(input_enablemouse)(void* ctx, uint8_t enable);
+typedef void(input_enabletouchscreen)(void* ctx, uint8_t enable);
+
+typedef uint8_t(input_iskeypressed)(void* ctx, KeyboardValues key);
+typedef void(input_setkeypressed)(void* ctx, KeyboardValues key, uint8_t ispressed);
+
+typedef uint8_t(input_iskeymodifierpressed)(void* ctx, KeyboardModifiers modifier);
+typedef void(input_setkeymodifierpressed)(void* ctx, KeyboardModifiers modifier, uint8_t ispressed);
+
+typedef uint8_t(input_ismousepressed)(void* ctx, MouseButton button);
+typedef void(input_setmousepressed)(void* ctx, MouseButton button, uint8_t ispressed);
+
+typedef uint8_t(input_getnumtouches)(void* ctx);
+typedef void(input_setnumtouches)(void* ctx, uint8_t num);
+
+typedef int32_t(joypad_readtouch)(void* ctx, TouchTypes type);
+typedef void(joypad_settouch)(void* ctx, TouchTypes type, int32_t val);
+
+// Disable input entering from outside the script, this allows the script to set input without
+// interruption, this includes all joypads, keyboard, mouse and touchscreen
+typedef void(input_enableoutsideinput)(void* ctx, uint8_t enable);
 
 // Savestate Library implemented in dll
 
@@ -389,13 +447,13 @@ typedef void(gui_drawpixel)(void* ctx, int x, int y, uint8_t alpha, uint8_t red,
 // gui.drawtext(int x, int y, string str [, textcolor [, backcolor]])
 // gui.parsecolor(color) ignored
 typedef char*(gui_savescreenshot)(void* ctx);
-typedef void(gui_savescreenshotas)(void* ctx, char* path);
-typedef void(gui_drawimage)(void* ctx, int dx, int dy, char* path, int sx, int sy, int sw, int sh,
-                            float alphamul);
+typedef void(gui_savescreenshotas)(void* ctx, const char* path);
+typedef void(gui_drawimage)(void* ctx, int dx, int dy, const char* path, int sx, int sy, int sw,
+                            int sh, float alphamul);
 // gui.opacity(int alpha) ignored
 // gui.transparency(int trans) ignored
 // function gui.register(function func) ignored
-typedef void(gui_popup)(void* ctx, char* message, char* type, char* icon);
+typedef void(gui_popup)(void* ctx, const char* message, const char* type, const char* icon);
 
 // Saves screenshot into byte array as raw framebuffer
 typedef uint8_t*(gui_savescreenshotmemory)(void* ctx, uint64_t* size);
@@ -406,4 +464,126 @@ typedef uint8_t*(gui_savescreenshotmemory)(void* ctx, uint64_t* size);
 
 // Bitwise Operations implemented in DLL
 
+// Settings
+
+// ALL SETTINGS
+/*
+    // Audio
+    std::string audio_device_id;
+    std::string sink_id;
+    bool audio_muted;
+    Setting<bool> enable_audio_stretching;
+    Setting<float> volume;
+
+    // Core
+    Setting<bool> use_multi_core;
+
+    // Cpu
+    CPUAccuracy cpu_accuracy;
+
+    bool cpuopt_page_tables;
+    bool cpuopt_block_linking;
+    bool cpuopt_return_stack_buffer;
+    bool cpuopt_fast_dispatcher;
+    bool cpuopt_context_elimination;
+    bool cpuopt_const_prop;
+    bool cpuopt_misc_ir;
+    bool cpuopt_reduce_misalign_checks;
+
+    bool cpuopt_unsafe_unfuse_fma;
+    bool cpuopt_unsafe_reduce_fp_error;
+
+    // Renderer
+    Setting<RendererBackend> renderer_backend;
+    bool renderer_debug;
+    Setting<int> vulkan_device;
+
+    Setting<u16> resolution_factor = Setting(static_cast<u16>(1));
+    Setting<int> aspect_ratio;
+    Setting<int> max_anisotropy;
+    Setting<bool> use_frame_limit;
+    Setting<u16> frame_limit;
+    Setting<bool> use_disk_shader_cache;
+    Setting<GPUAccuracy> gpu_accuracy;
+    Setting<bool> use_asynchronous_gpu_emulation;
+    Setting<bool> use_vsync;
+    Setting<bool> use_assembly_shaders;
+    Setting<bool> use_asynchronous_shaders;
+    Setting<bool> use_fast_gpu_time;
+
+    Setting<float> bg_red;
+    Setting<float> bg_green;
+    Setting<float> bg_blue;
+
+    // System
+    Setting<std::optional<u32>> rng_seed;
+    // Measured in seconds since epoch
+    Setting<std::optional<std::chrono::seconds>> custom_rtc;
+    // Set on game boot, reset on stop. Seconds difference between current time and `custom_rtc`
+    std::chrono::seconds custom_rtc_differential;
+
+    s32 current_user;
+    Setting<s32> language_index;
+    Setting<s32> region_index;
+    Setting<s32> time_zone_index;
+    Setting<s32> sound_index;
+
+    // Controls
+    // std::array<PlayerInput, 10> players;
+
+    // bool mouse_enabled;
+    std::string mouse_device;
+    // MouseButtonsRaw mouse_buttons;
+
+    // bool keyboard_enabled;
+    // KeyboardKeysRaw keyboard_keys;
+    // KeyboardModsRaw keyboard_mods;
+
+    // bool debug_pad_enabled;
+    // ButtonsRaw debug_pad_buttons;
+    // AnalogsRaw debug_pad_analogs;
+
+    std::string motion_device;
+    TouchscreenInput touchscreen;
+    std::atomic_bool is_device_reload_pending{true};
+    std::string udp_input_address;
+    u16 udp_input_port;
+    u8 udp_pad_index;
+
+    bool use_docked_mode;
+
+    // Data Storage
+    bool use_virtual_sd;
+    bool gamecard_inserted;
+    bool gamecard_current_game;
+    std::string gamecard_path;
+
+    // Debugging
+    bool record_frame_times;
+    bool use_gdbstub;
+    u16 gdbstub_port;
+    std::string program_args;
+    bool dump_exefs;
+    bool dump_nso;
+    bool reporting_services;
+    bool quest_flag;
+    bool disable_macro_jit;
+
+    // Misceallaneous
+    std::string log_filter;
+    bool use_dev_keys;
+
+    // Services
+    std::string bcat_backend;
+    bool bcat_boxcat_local;
+
+    // WebService
+    bool enable_telemetry;
+    std::string web_api_url;
+    std::string yuzu_username;
+    std::string yuzu_token;
+
+    // Add-Ons
+    std::map<u64, std::vector<std::string>> disabled_addons;
+*/
 } // namespace PluginDefinitions

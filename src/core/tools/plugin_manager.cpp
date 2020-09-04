@@ -155,6 +155,7 @@ void PluginManager::PluginThreadExecuter(std::shared_ptr<Plugin> plugin) {
         plugin->pluginCv.wait(lk, [this, plugin] { return plugin->ready; });
         plugin->ready = false;
         // Call shared lib main loop function, should already be loaded
+        // Could be instead obtained once, TODO
         GetDllFunction<PluginDefinitions::meta_handle_main_loop>(*plugin, "handleMainLoop")();
 
         // Once the end of this function is reached, the main loop must have completed
