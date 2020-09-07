@@ -12,13 +12,16 @@
 #include "yuzu/configuration/configure_input_player.h"
 #include "yuzu/hotkeys.h"
 
-ConfigureDialog::ConfigureDialog(QWidget* parent, HotkeyRegistry& registry)
+ConfigureDialog::ConfigureDialog(QWidget* parent, HotkeyRegistry& registry,
+                                 InputCommon::InputSubsystem* input_subsystem)
     : QDialog(parent), ui(new Ui::ConfigureDialog), registry(registry) {
     Settings::configuring_global = true;
 
     ui->setupUi(this);
     ui->hotkeysTab->Populate(registry);
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
+
+    ui->inputTab->Initialize(input_subsystem);
 
     SetConfiguration();
     PopulateSelectionList();
@@ -80,12 +83,12 @@ Q_DECLARE_METATYPE(QList<QWidget*>);
 
 void ConfigureDialog::PopulateSelectionList() {
     const std::array<std::pair<QString, QList<QWidget*>>, 6> items{
-        {{tr("General"), {ui->generalTab, ui->webTab, ui->debugTab, ui->uiTab}},
+        {{tr("General"), {ui->generalTab, ui->hotkeysTab, ui->uiTab, ui->webTab, ui->debugTab}},
          {tr("System"), {ui->systemTab, ui->profileManagerTab, ui->serviceTab, ui->filesystemTab}},
          {tr("CPU"), {ui->cpuTab, ui->cpuDebugTab}},
          {tr("Graphics"), {ui->graphicsTab, ui->graphicsAdvancedTab}},
          {tr("Audio"), {ui->audioTab}},
-         {tr("Controls"), {ui->inputTab, ui->hotkeysTab}}},
+         {tr("Controls"), ui->inputTab->GetSubTabs()}},
     };
 
     [[maybe_unused]] const QSignalBlocker blocker(ui->selectorList);
@@ -117,7 +120,7 @@ void ConfigureDialog::UpdateVisibleTabs() {
         {ui->generalTab, tr("General")},
         {ui->systemTab, tr("System")},
         {ui->profileManagerTab, tr("Profiles")},
-        {ui->inputTab, tr("Input")},
+        {ui->inputTab, tr("Controls")},
         {ui->hotkeysTab, tr("Hotkeys")},
         {ui->cpuTab, tr("CPU")},
         {ui->cpuDebugTab, tr("Debug")},
@@ -138,6 +141,6 @@ void ConfigureDialog::UpdateVisibleTabs() {
     const QList<QWidget*> tabs = qvariant_cast<QList<QWidget*>>(items[0]->data(Qt::UserRole));
 
     for (const auto tab : tabs) {
-        ui->tabWidget->addTab(tab, widgets.at(tab));
+        ui->tabWidget->addTab(tab, tab->accessibleName());
     }
 }
