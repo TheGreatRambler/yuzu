@@ -9,6 +9,7 @@
 #include "core/core_timing_util.h"
 #include "core/cpu_manager.h"
 #include "core/hardware_properties.h"
+#include "core/hle/kernel/memory/page_table.h"
 #include "core/hle/kernel/process.h"
 #include "core/loader/loader.h"
 #include "core/memory.h"
@@ -284,24 +285,93 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
         Plugin* self = (Plugin*)pluginInstance;
         uint64_t id;
         if (self->system->GetAppLoader().ReadProgramId(id) != Loader::ResultStatus::Success) {
-            return NULL;
+            return 0;
         } else {
             return id;
         }
     })
-    /*
-    ADD_FUNCTION_TO_PLUGIN(emu_getprocessid)
-    ADD_FUNCTION_TO_PLUGIN(emu_getheapstart)
-    ADD_FUNCTION_TO_PLUGIN(emu_getmainstart)
-    ADD_FUNCTION_TO_PLUGIN(emu_log)
-    ADD_FUNCTION_TO_PLUGIN(joypad_getnumjoypads)
-    ADD_FUNCTION_TO_PLUGIN(joypad_setnumjoypads)
-    ADD_FUNCTION_TO_PLUGIN(joypad_addjoypad)
-    ADD_FUNCTION_TO_PLUGIN(emu_getscreenjpeg)
-    ADD_FUNCTION_TO_PLUGIN(joypad_readjoystick)
-    ADD_FUNCTION_TO_PLUGIN(joypad_read)
-    ADD_FUNCTION_TO_PLUGIN(rom_readbytes)
-    */
+    ADD_FUNCTION_TO_PLUGIN(emu_getprocessid, [](void* pluginInstance) -> uint64_t {
+        Plugin* self = (Plugin*)pluginInstance;
+        if (self->system->CurrentProcess() == nullptr) {
+            return 0;
+        } else {
+            return self->system->CurrentProcess()->GetProcessID();
+        }
+    })
+    ADD_FUNCTION_TO_PLUGIN(emu_getheapstart, [](void* pluginInstance) -> uint64_t {
+        Plugin* self = (Plugin*)pluginInstance;
+        if (self->system->CurrentProcess() == nullptr) {
+            return 0;
+        } else {
+            return self->system->CurrentProcess()->PageTable().GetHeapRegionStart();
+        }
+    })
+    ADD_FUNCTION_TO_PLUGIN(emu_getheapsize, [](void* pluginInstance) -> uint64_t {
+        Plugin* self = (Plugin*)pluginInstance;
+        if (self->system->CurrentProcess() == nullptr) {
+            return 0;
+        } else {
+            return self->system->CurrentProcess()->PageTable().GetHeapRegionSize();
+        }
+    })
+    ADD_FUNCTION_TO_PLUGIN(emu_getmainstart, [](void* pluginInstance) -> uint64_t {
+        Plugin* self = (Plugin*)pluginInstance;
+        if (self->system->CurrentProcess() == nullptr) {
+            return 0;
+        } else {
+            return self->system->CurrentProcess()->PageTable().GetAddressSpaceStart();
+        }
+    })
+    ADD_FUNCTION_TO_PLUGIN(emu_getmainsize, [](void* pluginInstance) -> uint64_t {
+        Plugin* self = (Plugin*)pluginInstance;
+        if (self->system->CurrentProcess() == nullptr) {
+            return 0;
+        } else {
+            return self->system->CurrentProcess()->PageTable().GetAddressSpaceSize();
+        }
+    })
+    ADD_FUNCTION_TO_PLUGIN(emu_getstackstart, [](void* pluginInstance) -> uint64_t {
+        Plugin* self = (Plugin*)pluginInstance;
+        if (self->system->CurrentProcess() == nullptr) {
+            return 0;
+        } else {
+            return self->system->CurrentProcess()->PageTable().GetStackRegionStart();
+        }
+    })
+    ADD_FUNCTION_TO_PLUGIN(emu_getstacksize, [](void* pluginInstance) -> uint64_t {
+        Plugin* self = (Plugin*)pluginInstance;
+        if (self->system->CurrentProcess() == nullptr) {
+            return 0;
+        } else {
+            return self->system->CurrentProcess()->PageTable().GetStackRegionSize();
+        }
+    })
+    // clang-format off
+    ADD_FUNCTION_TO_PLUGIN(emu_log, [](void* pluginInstance,
+        const char* logMessage, PluginDefinitions::LogLevel level) -> void {
+        Plugin* self = (Plugin*)pluginInstance;
+        // TODO send to correct channels
+        /*
+        switch (level) {
+        case PluginDefinitions::LogLevel::Info:
+            LOG_INFO(Log::Class::Plugin, logMessage);
+            break;
+        case PluginDefinitions::LogLevel::Critical:
+            LOG_CRITICAL(Log::Class::Plugin, logMessage);
+            break;
+        case PluginDefinitions::LogLevel::Debug:
+            LOG_DEBUG(Log::Class::Plugin, logMessage);
+            break;
+        case PluginDefinitions::LogLevel::Warning:
+            LOG_WARNING(Log::Class::Plugin, logMessage);
+            break;
+        case PluginDefinitions::LogLevel::Error:
+            LOG_ERROR(Log::Class::Plugin, logMessage);
+            break;
+        }
+        */
+    })
+    // clang-format on
 }
 
 /*
