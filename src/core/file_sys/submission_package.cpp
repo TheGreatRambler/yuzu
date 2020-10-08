@@ -267,9 +267,9 @@ void NSP::ReadNCAs(const std::vector<VirtualFile>& files) {
             }
 
             const CNMT cnmt(inner_file);
-            auto& ncas_title = ncas[cnmt.GetTitleID()];
 
-            ncas_title[{cnmt.GetType(), ContentRecordType::Meta}] = nca;
+            ncas[cnmt.GetTitleID()][{cnmt.GetType(), ContentRecordType::Meta}] = nca;
+
             for (const auto& rec : cnmt.GetContentRecords()) {
                 const auto id_string = Common::HexToString(rec.nca_id, false);
                 auto next_file = pfs->GetFile(fmt::format("{}.nca", id_string));
@@ -286,13 +286,32 @@ void NSP::ReadNCAs(const std::vector<VirtualFile>& files) {
                 }
 
                 auto next_nca = std::make_shared<NCA>(std::move(next_file), nullptr, 0);
+
                 if (next_nca->GetType() == NCAContentType::Program) {
-                    program_status[cnmt.GetTitleID()] = next_nca->GetStatus();
+                    program_status[next_nca->GetTitleId()] = next_nca->GetStatus();
                 }
-                if (next_nca->GetStatus() == Loader::ResultStatus::Success ||
-                    (next_nca->GetStatus() == Loader::ResultStatus::ErrorMissingBKTRBaseRomFS &&
-                     (cnmt.GetTitleID() & 0x800) != 0)) {
-                    ncas_title[{cnmt.GetType(), rec.type}] = std::move(next_nca);
+
+                if (next_nca->GetStatus() != Loader::ResultStatus::Success &&
+                    next_nca->GetStatus() != Loader::ResultStatus::ErrorMissingBKTRBaseRomFS) {
+                    continue;
+                }
+
+                // If the last 3 hexadecimal digits of the CNMT TitleID is 0x800 or is missing the
+                // BKTRBaseRomFS, this is an update NCA. Otherwise, this is a base NCA.
+                if ((cnmt.GetTitleID() & 0x800) != 0 ||
+                    next_nca->GetStatus() == Loader::ResultStatus::ErrorMissingBKTRBaseRomFS) {
+                    // If the last 3 hexadecimal digits of the NCA's TitleID is between 0x1 and
+                    // 0x7FF, this is a multi-program update NCA. Otherwise, this is a regular
+                    // update NCA.
+                    if ((next_nca->GetTitleId() & 0x7FF) != 0 &&
+                        (next_nca->GetTitleId() & 0x800) == 0) {
+                        ncas[next_nca->GetTitleId()][{cnmt.GetType(), rec.type}] =
+                            std::move(next_nca);
+                    } else {
+                        ncas[cnmt.GetTitleID()][{cnmt.GetType(), rec.type}] = std::move(next_nca);
+                    }
+                } else {
+                    ncas[next_nca->GetTitleId()][{cnmt.GetType(), rec.type}] = std::move(next_nca);
                 }
             }
 

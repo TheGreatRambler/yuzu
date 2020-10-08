@@ -29,8 +29,8 @@ void InnerFence::Queue() {
     }
     ASSERT(!event);
 
-    event = device.GetLogical().CreateNewEvent();
-    ticks = scheduler.Ticks();
+    event = device.GetLogical().CreateEvent();
+    ticks = scheduler.CurrentTick();
 
     scheduler.RequestOutsideRenderPassOperationContext();
     scheduler.Record([event = *event](vk::CommandBuffer cmdbuf) {
@@ -52,7 +52,7 @@ void InnerFence::Wait() {
     }
     ASSERT(event);
 
-    if (ticks >= scheduler.Ticks()) {
+    if (ticks >= scheduler.CurrentTick()) {
         scheduler.Flush();
     }
     while (!IsEventSignalled()) {
@@ -71,12 +71,12 @@ bool InnerFence::IsEventSignalled() const {
     }
 }
 
-VKFenceManager::VKFenceManager(Core::System& system, VideoCore::RasterizerInterface& rasterizer,
-                               const VKDevice& device, VKScheduler& scheduler,
-                               VKTextureCache& texture_cache, VKBufferCache& buffer_cache,
-                               VKQueryCache& query_cache)
-    : GenericFenceManager(system, rasterizer, texture_cache, buffer_cache, query_cache),
-      device{device}, scheduler{scheduler} {}
+VKFenceManager::VKFenceManager(VideoCore::RasterizerInterface& rasterizer, Tegra::GPU& gpu,
+                               Tegra::MemoryManager& memory_manager, VKTextureCache& texture_cache,
+                               VKBufferCache& buffer_cache, VKQueryCache& query_cache,
+                               const VKDevice& device_, VKScheduler& scheduler_)
+    : GenericFenceManager(rasterizer, gpu, texture_cache, buffer_cache, query_cache),
+      device{device_}, scheduler{scheduler_} {}
 
 Fence VKFenceManager::CreateFence(u32 value, bool is_stubbed) {
     return std::make_shared<InnerFence>(device, scheduler, value, is_stubbed);

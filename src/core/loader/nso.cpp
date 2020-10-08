@@ -71,21 +71,21 @@ FileType AppLoader_NSO::IdentifyType(const FileSys::VirtualFile& file) {
     return FileType::NSO;
 }
 
-std::optional<VAddr> AppLoader_NSO::LoadModule(Kernel::Process& process,
+std::optional<VAddr> AppLoader_NSO::LoadModule(Kernel::Process& process, Core::System& system,
                                                const FileSys::VfsFile& file, VAddr load_base,
                                                bool should_pass_arguments, bool load_into_process,
                                                std::optional<FileSys::PatchManager> pm) {
     if (file.GetSize() < sizeof(NSOHeader)) {
-        return {};
+        return std::nullopt;
     }
 
     NSOHeader nso_header{};
     if (sizeof(NSOHeader) != file.ReadObject(&nso_header)) {
-        return {};
+        return std::nullopt;
     }
 
     if (nso_header.magic != Common::MakeMagic('N', 'S', 'O', '0')) {
-        return {};
+        return std::nullopt;
     }
 
     // Build program image
@@ -148,7 +148,6 @@ std::optional<VAddr> AppLoader_NSO::LoadModule(Kernel::Process& process,
 
     // Apply cheats if they exist and the program has a valid title ID
     if (pm) {
-        auto& system = Core::System::GetInstance();
         system.SetCurrentProcessBuildID(nso_header.build_id);
         const auto cheats = pm->CreateCheatList(system, nso_header.build_id);
         if (!cheats.empty()) {
@@ -166,7 +165,7 @@ std::optional<VAddr> AppLoader_NSO::LoadModule(Kernel::Process& process,
     return load_base + image_size;
 }
 
-AppLoader_NSO::LoadResult AppLoader_NSO::Load(Kernel::Process& process) {
+AppLoader_NSO::LoadResult AppLoader_NSO::Load(Kernel::Process& process, Core::System& system) {
     if (is_loaded) {
         return {ResultStatus::ErrorAlreadyLoaded, {}};
     }
@@ -175,7 +174,7 @@ AppLoader_NSO::LoadResult AppLoader_NSO::Load(Kernel::Process& process) {
 
     // Load module
     const VAddr base_address = process.PageTable().GetCodeRegionStart();
-    if (!LoadModule(process, *file, base_address, true, true)) {
+    if (!LoadModule(process, system, *file, base_address, true, true)) {
         return {ResultStatus::ErrorLoadingNSO, {}};
     }
 

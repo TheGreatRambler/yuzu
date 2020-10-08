@@ -65,10 +65,12 @@ private:
 
     void GetSharedMemoryHandle(Kernel::HLERequestContext& ctx);
     void UpdateControllers(std::uintptr_t user_data, std::chrono::nanoseconds ns_late);
+    void UpdateMotion(std::uintptr_t user_data, std::chrono::nanoseconds ns_late);
 
     std::shared_ptr<Kernel::SharedMemory> shared_mem;
 
     std::shared_ptr<Core::Timing::EventType> pad_update_event;
+    std::shared_ptr<Core::Timing::EventType> motion_update_event;
     Core::System& system;
 
     std::array<std::unique_ptr<ControllerBase>, static_cast<size_t>(HidController::MaxControllers)>
@@ -86,6 +88,8 @@ private:
     void CreateAppletResource(Kernel::HLERequestContext& ctx);
     void ActivateXpad(Kernel::HLERequestContext& ctx);
     void GetXpadIDs(Kernel::HLERequestContext& ctx);
+    void ActivateSixAxisSensor(Kernel::HLERequestContext& ctx);
+    void DeactivateSixAxisSensor(Kernel::HLERequestContext& ctx);
     void ActivateDebugPad(Kernel::HLERequestContext& ctx);
     void ActivateTouchScreen(Kernel::HLERequestContext& ctx);
     void ActivateMouse(Kernel::HLERequestContext& ctx);
@@ -95,6 +99,7 @@ private:
     void ActivateNpadWithRevision(Kernel::HLERequestContext& ctx);
     void StartSixAxisSensor(Kernel::HLERequestContext& ctx);
     void StopSixAxisSensor(Kernel::HLERequestContext& ctx);
+    void EnableSixAxisSensorFusion(Kernel::HLERequestContext& ctx);
     void SetGyroscopeZeroDriftMode(Kernel::HLERequestContext& ctx);
     void GetGyroscopeZeroDriftMode(Kernel::HLERequestContext& ctx);
     void ResetGyroscopeZeroDriftMode(Kernel::HLERequestContext& ctx);
@@ -118,6 +123,8 @@ private:
     void SetNpadHandheldActivationMode(Kernel::HLERequestContext& ctx);
     void GetNpadHandheldActivationMode(Kernel::HLERequestContext& ctx);
     void SwapNpadAssignment(Kernel::HLERequestContext& ctx);
+    void IsUnintendedHomeButtonInputProtectionEnabled(Kernel::HLERequestContext& ctx);
+    void EnableUnintendedHomeButtonInputProtection(Kernel::HLERequestContext& ctx);
     void BeginPermitVibrationSession(Kernel::HLERequestContext& ctx);
     void EndPermitVibrationSession(Kernel::HLERequestContext& ctx);
     void SendVibrationValue(Kernel::HLERequestContext& ctx);

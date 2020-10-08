@@ -18,6 +18,7 @@
 #include "core/hle/service/sm/sm.h"
 #include "input_common/gcadapter/gc_poller.h"
 #include "input_common/main.h"
+#include "input_common/udp/udp.h"
 #include "ui_configure_input_player.h"
 #include "yuzu/configuration/config.h"
 #include "yuzu/configuration/configure_input_player.h"
@@ -149,6 +150,14 @@ QString ButtonToText(const Common::ParamPackage& param) {
         return GetKeyName(param.Get("code", 0));
     }
 
+    if (param.Get("engine", "") == "cemuhookudp") {
+        if (param.Has("pad_index")) {
+            const QString motion_str = QString::fromStdString(param.Get("pad_index", ""));
+            return QObject::tr("Motion %1").arg(motion_str);
+        }
+        return GetKeyName(param.Get("code", 0));
+    }
+
     if (param.Get("engine", "") == "sdl") {
         if (param.Has("hat")) {
             const QString hat_str = QString::fromStdString(param.Get("hat", ""));
@@ -247,6 +256,11 @@ ConfigureInputPlayer::ConfigureInputPlayer(QWidget* parent, std::size_t player_i
         ui->buttonSL,       ui->buttonSR,     ui->buttonHome,      ui->buttonScreenshot,
     };
 
+    mod_buttons = {
+        ui->buttonLStickMod,
+        ui->buttonRStickMod,
+    };
+
     analog_map_buttons = {{
         {
             ui->buttonLStickUp,
@@ -262,6 +276,11 @@ ConfigureInputPlayer::ConfigureInputPlayer(QWidget* parent, std::size_t player_i
         },
     }};
 
+    motion_map = {
+        ui->buttonMotionLeft,
+        ui->buttonMotionRight,
+    };
+
     analog_map_deadzone_label = {ui->labelLStickDeadzone, ui->labelRStickDeadzone};
     analog_map_deadzone_slider = {ui->sliderLStickDeadzone, ui->sliderRStickDeadzone};
     analog_map_modifier_groupbox = {ui->buttonLStickModGroup, ui->buttonRStickModGroup};
@@ -271,7 +290,7 @@ ConfigureInputPlayer::ConfigureInputPlayer(QWidget* parent, std::size_t player_i
     analog_map_range_spinbox = {ui->spinboxLStickRange, ui->spinboxRStickRange};
 
     const auto ConfigureButtonClick = [&](QPushButton* button, Common::ParamPackage* param,
-                                          int default_val) {
+                                          int default_val, InputCommon::Polling::DeviceType type) {
         connect(button, &QPushButton::clicked, [=, this] {
             HandleClick(
                 button,
@@ -291,22 +310,56 @@ ConfigureInputPlayer::ConfigureInputPlayer(QWidget* parent, std::size_t player_i
                     }
                     *param = std::move(params);
                 },
-                InputCommon::Polling::DeviceType::Button);
+                type);
         });
     };
 
     for (int button_id = 0; button_id < Settings::NativeButton::NumButtons; ++button_id) {
         auto* const button = button_map[button_id];
+
         if (button == nullptr) {
             continue;
         }
+
         ConfigureButtonClick(button_map[button_id], &buttons_param[button_id],
-                             Config::default_buttons[button_id]);
+                             Config::default_buttons[button_id],
+                             InputCommon::Polling::DeviceType::Button);
+
+        button->setContextMenuPolicy(Qt::CustomContextMenu);
+
+        connect(button, &QPushButton::customContextMenuRequested,
+                [=, this](const QPoint& menu_location) {
+                    QMenu context_menu;
+                    context_menu.addAction(tr("Clear"), [&] {
+                        buttons_param[button_id].Clear();
+                        button_map[button_id]->setText(tr("[not set]"));
+                    });
+                    context_menu.exec(button_map[button_id]->mapToGlobal(menu_location));
+                });
     }
 
-    // Handle clicks for the modifier buttons as well.
-    ConfigureButtonClick(ui->buttonLStickMod, &lstick_mod, Config::default_stick_mod[0]);
-    ConfigureButtonClick(ui->buttonRStickMod, &rstick_mod, Config::default_stick_mod[1]);
+    for (int motion_id = 0; motion_id < Settings::NativeMotion::NumMotions; ++motion_id) {
+        auto* const button = motion_map[motion_id];
+        if (button == nullptr) {
+            continue;
+        }
+
+        ConfigureButtonClick(motion_map[motion_id], &motions_param[motion_id],
+                             Config::default_motions[motion_id],
+                             InputCommon::Polling::DeviceType::Motion);
+
+        button->setContextMenuPolicy(Qt::CustomContextMenu);
+
+        connect(button, &QPushButton::customContextMenuRequested,
+                [=, this](const QPoint& menu_location) {
+                    QMenu context_menu;
+                    context_menu.addAction(tr("Clear"), [&] {
+                        motions_param[motion_id].Clear();
+                        motion_map[motion_id]->setText(tr("[not set]"));
+                    });
+                    context_menu.exec(motion_map[motion_id]->mapToGlobal(menu_location));
+                });
+    }
 
     for (int analog_id = 0; analog_id < Settings::NativeAnalog::NumAnalogs; ++analog_id) {
         for (int sub_button_id = 0; sub_button_id < ANALOG_SUB_BUTTONS_NUM; ++sub_button_id) {
@@ -325,7 +378,37 @@ ConfigureInputPlayer::ConfigureInputPlayer(QWidget* parent, std::size_t player_i
                     },
                     InputCommon::Polling::DeviceType::AnalogPreferred);
             });
+
+            analog_button->setContextMenuPolicy(Qt::CustomContextMenu);
+
+            connect(analog_button, &QPushButton::customContextMenuRequested,
+                    [=, this](const QPoint& menu_location) {
+                        QMenu context_menu;
+                        context_menu.addAction(tr("Clear"), [&] {
+                            analogs_param[analog_id].Clear();
+                            analog_map_buttons[analog_id][sub_button_id]->setText(tr("[not set]"));
+                        });
+                        context_menu.exec(analog_map_buttons[analog_id][sub_button_id]->mapToGlobal(
+                            menu_location));
+                    });
         }
+
+        // Handle clicks for the modifier buttons as well.
+        ConfigureButtonClick(mod_buttons[analog_id], &stick_mod_param[analog_id],
+                             Config::default_stick_mod[analog_id],
+                             InputCommon::Polling::DeviceType::Button);
+
+        mod_buttons[analog_id]->setContextMenuPolicy(Qt::CustomContextMenu);
+
+        connect(mod_buttons[analog_id], &QPushButton::customContextMenuRequested,
+                [=, this](const QPoint& menu_location) {
+                    QMenu context_menu;
+                    context_menu.addAction(tr("Clear"), [&] {
+                        stick_mod_param[analog_id].Clear();
+                        mod_buttons[analog_id]->setText(tr("[not set]"));
+                    });
+                    context_menu.exec(mod_buttons[analog_id]->mapToGlobal(menu_location));
+                });
 
         connect(analog_map_range_spinbox[analog_id], qOverload<int>(&QSpinBox::valueChanged),
                 [=, this] {
@@ -385,9 +468,11 @@ ConfigureInputPlayer::ConfigureInputPlayer(QWidget* parent, std::size_t player_i
 
     UpdateControllerIcon();
     UpdateControllerAvailableButtons();
+    UpdateMotionButtons();
     connect(ui->comboControllerType, qOverload<int>(&QComboBox::currentIndexChanged), [this](int) {
         UpdateControllerIcon();
         UpdateControllerAvailableButtons();
+        UpdateMotionButtons();
     });
 
     connect(ui->comboDevices, qOverload<int>(&QComboBox::currentIndexChanged), this,
@@ -412,6 +497,13 @@ ConfigureInputPlayer::ConfigureInputPlayer(QWidget* parent, std::size_t player_i
         }
         if (input_subsystem->GetGCAnalogs()->IsPolling()) {
             params = input_subsystem->GetGCAnalogs()->GetNextInput();
+            if (params.Has("engine")) {
+                SetPollingResult(params, false);
+                return;
+            }
+        }
+        if (input_subsystem->GetUDPMotions()->IsPolling()) {
+            params = input_subsystem->GetUDPMotions()->GetNextInput();
             if (params.Has("engine")) {
                 SetPollingResult(params, false);
                 return;
@@ -447,6 +539,10 @@ void ConfigureInputPlayer::ApplyConfiguration() {
     if (debug) {
         return;
     }
+
+    auto& motions = player.motions;
+    std::transform(motions_param.begin(), motions_param.end(), motions.begin(),
+                   [](const Common::ParamPackage& param) { return param.Serialize(); });
 
     player.controller_type =
         static_cast<Settings::ControllerType>(ui->comboControllerType->currentIndex());
@@ -501,6 +597,8 @@ void ConfigureInputPlayer::LoadConfiguration() {
                        [](const std::string& str) { return Common::ParamPackage(str); });
         std::transform(player.analogs.begin(), player.analogs.end(), analogs_param.begin(),
                        [](const std::string& str) { return Common::ParamPackage(str); });
+        std::transform(player.motions.begin(), player.motions.end(), motions_param.begin(),
+                       [](const std::string& str) { return Common::ParamPackage(str); });
     }
 
     UpdateUI();
@@ -530,19 +628,21 @@ void ConfigureInputPlayer::RestoreDefaults() {
             InputCommon::GenerateKeyboardParam(Config::default_buttons[button_id])};
     }
 
-    // Reset Modifier Buttons
-    lstick_mod =
-        Common::ParamPackage(InputCommon::GenerateKeyboardParam(Config::default_stick_mod[0]));
-    rstick_mod =
-        Common::ParamPackage(InputCommon::GenerateKeyboardParam(Config::default_stick_mod[1]));
-
-    // Reset Analogs
+    // Reset Analogs and Modifier Buttons
     for (int analog_id = 0; analog_id < Settings::NativeAnalog::NumAnalogs; ++analog_id) {
         for (int sub_button_id = 0; sub_button_id < ANALOG_SUB_BUTTONS_NUM; ++sub_button_id) {
             Common::ParamPackage params{InputCommon::GenerateKeyboardParam(
                 Config::default_analogs[analog_id][sub_button_id])};
             SetAnalogParam(params, analogs_param[analog_id], analog_sub_buttons[sub_button_id]);
         }
+
+        stick_mod_param[analog_id] = Common::ParamPackage(
+            InputCommon::GenerateKeyboardParam(Config::default_stick_mod[analog_id]));
+    }
+
+    for (int motion_id = 0; motion_id < Settings::NativeMotion::NumMotions; ++motion_id) {
+        motions_param[motion_id] = Common::ParamPackage{
+            InputCommon::GenerateKeyboardParam(Config::default_motions[motion_id])};
     }
     UpdateUI();
     UpdateInputDevices();
@@ -552,25 +652,33 @@ void ConfigureInputPlayer::RestoreDefaults() {
 void ConfigureInputPlayer::ClearAll() {
     for (int button_id = 0; button_id < Settings::NativeButton::NumButtons; ++button_id) {
         const auto* const button = button_map[button_id];
-        if (button == nullptr || !button->isEnabled()) {
+        if (button == nullptr) {
             continue;
         }
 
         buttons_param[button_id].Clear();
     }
 
-    lstick_mod.Clear();
-    rstick_mod.Clear();
-
     for (int analog_id = 0; analog_id < Settings::NativeAnalog::NumAnalogs; ++analog_id) {
         for (int sub_button_id = 0; sub_button_id < ANALOG_SUB_BUTTONS_NUM; ++sub_button_id) {
             const auto* const analog_button = analog_map_buttons[analog_id][sub_button_id];
-            if (analog_button == nullptr || !analog_button->isEnabled()) {
+            if (analog_button == nullptr) {
                 continue;
             }
 
             analogs_param[analog_id].Clear();
         }
+
+        stick_mod_param[analog_id].Clear();
+    }
+
+    for (int motion_id = 0; motion_id < Settings::NativeMotion::NumMotions; ++motion_id) {
+        const auto* const motion_button = motion_map[motion_id];
+        if (motion_button == nullptr) {
+            continue;
+        }
+
+        motions_param[motion_id].Clear();
     }
 
     UpdateUI();
@@ -582,8 +690,9 @@ void ConfigureInputPlayer::UpdateUI() {
         button_map[button]->setText(ButtonToText(buttons_param[button]));
     }
 
-    ui->buttonLStickMod->setText(ButtonToText(lstick_mod));
-    ui->buttonRStickMod->setText(ButtonToText(rstick_mod));
+    for (int motion_id = 0; motion_id < Settings::NativeMotion::NumMotions; ++motion_id) {
+        motion_map[motion_id]->setText(ButtonToText(motions_param[motion_id]));
+    }
 
     for (int analog_id = 0; analog_id < Settings::NativeAnalog::NumAnalogs; ++analog_id) {
         for (int sub_button_id = 0; sub_button_id < ANALOG_SUB_BUTTONS_NUM; ++sub_button_id) {
@@ -596,6 +705,8 @@ void ConfigureInputPlayer::UpdateUI() {
             analog_button->setText(
                 AnalogToText(analogs_param[analog_id], analog_sub_buttons[sub_button_id]));
         }
+
+        mod_buttons[analog_id]->setText(ButtonToText(stick_mod_param[analog_id]));
 
         const auto deadzone_label = analog_map_deadzone_label[analog_id];
         const auto deadzone_slider = analog_map_deadzone_slider[analog_id];
@@ -646,10 +757,10 @@ void ConfigureInputPlayer::UpdateMappingWithDefaults() {
     const auto& device = input_devices[ui->comboDevices->currentIndex()];
     auto button_mapping = input_subsystem->GetButtonMappingForDevice(device);
     auto analog_mapping = input_subsystem->GetAnalogMappingForDevice(device);
-    for (int i = 0; i < buttons_param.size(); ++i) {
+    for (std::size_t i = 0; i < buttons_param.size(); ++i) {
         buttons_param[i] = button_mapping[static_cast<Settings::NativeButton::Values>(i)];
     }
-    for (int i = 0; i < analogs_param.size(); ++i) {
+    for (std::size_t i = 0; i < analogs_param.size(); ++i) {
         analogs_param[i] = analog_mapping[static_cast<Settings::NativeAnalog::Values>(i)];
     }
 
@@ -659,7 +770,11 @@ void ConfigureInputPlayer::UpdateMappingWithDefaults() {
 void ConfigureInputPlayer::HandleClick(
     QPushButton* button, std::function<void(const Common::ParamPackage&)> new_input_setter,
     InputCommon::Polling::DeviceType type) {
-    button->setText(tr("[waiting]"));
+    if (button == ui->buttonMotionLeft || button == ui->buttonMotionRight) {
+        button->setText(tr("Shake!"));
+    } else {
+        button->setText(tr("[waiting]"));
+    }
     button->setFocus();
 
     // The first two input devices are always Any and Keyboard/Mouse. If the user filtered to a
@@ -683,6 +798,10 @@ void ConfigureInputPlayer::HandleClick(
         input_subsystem->GetGCAnalogs()->BeginConfiguration();
     }
 
+    if (type == InputCommon::Polling::DeviceType::Motion) {
+        input_subsystem->GetUDPMotions()->BeginConfiguration();
+    }
+
     timeout_timer->start(2500); // Cancel after 2.5 seconds
     poll_timer->start(50);      // Check for new inputs every 50ms
 }
@@ -699,6 +818,8 @@ void ConfigureInputPlayer::SetPollingResult(const Common::ParamPackage& params, 
 
     input_subsystem->GetGCButtons()->EndConfiguration();
     input_subsystem->GetGCAnalogs()->EndConfiguration();
+
+    input_subsystem->GetUDPMotions()->EndConfiguration();
 
     if (!abort) {
         (*input_setter)(params);
@@ -829,6 +950,37 @@ void ConfigureInputPlayer::UpdateControllerAvailableButtons() {
 
     for (auto* widget : layout_hidden) {
         widget->hide();
+    }
+}
+
+void ConfigureInputPlayer::UpdateMotionButtons() {
+    if (debug) {
+        // Motion isn't used with the debug controller, hide both groupboxes.
+        ui->buttonMotionLeftGroup->hide();
+        ui->buttonMotionRightGroup->hide();
+        return;
+    }
+
+    // Show/hide the "Motion 1/2" groupboxes depending on the currently selected controller.
+    switch (GetControllerTypeFromIndex(ui->comboControllerType->currentIndex())) {
+    case Settings::ControllerType::ProController:
+    case Settings::ControllerType::LeftJoycon:
+    case Settings::ControllerType::Handheld:
+        // Show "Motion 1" and hide "Motion 2".
+        ui->buttonMotionLeftGroup->show();
+        ui->buttonMotionRightGroup->hide();
+        break;
+    case Settings::ControllerType::RightJoycon:
+        // Show "Motion 2" and hide "Motion 1".
+        ui->buttonMotionLeftGroup->hide();
+        ui->buttonMotionRightGroup->show();
+        break;
+    case Settings::ControllerType::DualJoyconDetached:
+    default:
+        // Show both "Motion 1/2".
+        ui->buttonMotionLeftGroup->show();
+        ui->buttonMotionRightGroup->show();
+        break;
     }
 }
 

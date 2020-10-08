@@ -6,6 +6,7 @@
 #include <exception>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -17,21 +18,42 @@ namespace Vulkan::vk {
 
 namespace {
 
-void SortPhysicalDevices(std::vector<VkPhysicalDevice>& devices, const InstanceDispatch& dld) {
-    std::stable_sort(devices.begin(), devices.end(), [&](auto lhs, auto rhs) {
-        // This will call Vulkan more than needed, but these calls are cheap.
-        const auto lhs_properties = vk::PhysicalDevice(lhs, dld).GetProperties();
-        const auto rhs_properties = vk::PhysicalDevice(rhs, dld).GetProperties();
+template <typename Func>
+void SortPhysicalDevices(std::vector<VkPhysicalDevice>& devices, const InstanceDispatch& dld,
+                         Func&& func) {
+    // Calling GetProperties calls Vulkan more than needed. But they are supposed to be cheap
+    // functions.
+    std::stable_sort(devices.begin(), devices.end(),
+                     [&dld, &func](VkPhysicalDevice lhs, VkPhysicalDevice rhs) {
+                         return func(vk::PhysicalDevice(lhs, dld).GetProperties(),
+                                     vk::PhysicalDevice(rhs, dld).GetProperties());
+                     });
+}
 
-        // Prefer discrete GPUs, Nvidia over AMD, AMD over Intel, Intel over the rest.
-        const bool preferred =
-            (lhs_properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
-             rhs_properties.deviceType != VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) ||
-            (lhs_properties.vendorID == 0x10DE && rhs_properties.vendorID != 0x10DE) ||
-            (lhs_properties.vendorID == 0x1002 && rhs_properties.vendorID != 0x1002) ||
-            (lhs_properties.vendorID == 0x8086 && rhs_properties.vendorID != 0x8086);
-        return !preferred;
+void SortPhysicalDevicesPerVendor(std::vector<VkPhysicalDevice>& devices,
+                                  const InstanceDispatch& dld,
+                                  std::initializer_list<u32> vendor_ids) {
+    for (auto it = vendor_ids.end(); it != vendor_ids.begin();) {
+        --it;
+        SortPhysicalDevices(devices, dld, [id = *it](const auto& lhs, const auto& rhs) {
+            return lhs.vendorID == id && rhs.vendorID != id;
+        });
+    }
+}
+
+void SortPhysicalDevices(std::vector<VkPhysicalDevice>& devices, const InstanceDispatch& dld) {
+    // Sort by name, this will set a base and make GPUs with higher numbers appear first
+    // (e.g. GTX 1650 will intentionally be listed before a GTX 1080).
+    SortPhysicalDevices(devices, dld, [](const auto& lhs, const auto& rhs) {
+        return std::string_view{lhs.deviceName} > std::string_view{rhs.deviceName};
     });
+    // Prefer discrete over non-discrete
+    SortPhysicalDevices(devices, dld, [](const auto& lhs, const auto& rhs) {
+        return lhs.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU &&
+               rhs.deviceType != VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+    });
+    // Prefer Nvidia over AMD, AMD over Intel, Intel over the rest.
+    SortPhysicalDevicesPerVendor(devices, dld, {0x10DE, 0x1002, 0x8086});
 }
 
 template <typename T>
@@ -148,6 +170,7 @@ void Load(VkDevice device, DeviceDispatch& dld) noexcept {
     X(vkGetFenceStatus);
     X(vkGetImageMemoryRequirements);
     X(vkGetQueryPoolResults);
+    X(vkGetSemaphoreCounterValueKHR);
     X(vkMapMemory);
     X(vkQueueSubmit);
     X(vkResetFences);
@@ -156,6 +179,7 @@ void Load(VkDevice device, DeviceDispatch& dld) noexcept {
     X(vkUpdateDescriptorSetWithTemplateKHR);
     X(vkUpdateDescriptorSets);
     X(vkWaitForFences);
+    X(vkWaitSemaphoresKHR);
 #undef X
 }
 
@@ -262,6 +286,22 @@ const char* ToString(VkResult result) noexcept {
         return "VK_ERROR_INVALID_DEVICE_ADDRESS_EXT";
     case VkResult::VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT:
         return "VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT";
+    case VkResult::VK_ERROR_UNKNOWN:
+        return "VK_ERROR_UNKNOWN";
+    case VkResult::VK_ERROR_INCOMPATIBLE_VERSION_KHR:
+        return "VK_ERROR_INCOMPATIBLE_VERSION_KHR";
+    case VkResult::VK_THREAD_IDLE_KHR:
+        return "VK_THREAD_IDLE_KHR";
+    case VkResult::VK_THREAD_DONE_KHR:
+        return "VK_THREAD_DONE_KHR";
+    case VkResult::VK_OPERATION_DEFERRED_KHR:
+        return "VK_OPERATION_DEFERRED_KHR";
+    case VkResult::VK_OPERATION_NOT_DEFERRED_KHR:
+        return "VK_OPERATION_NOT_DEFERRED_KHR";
+    case VkResult::VK_PIPELINE_COMPILE_REQUIRED_EXT:
+        return "VK_PIPELINE_COMPILE_REQUIRED_EXT";
+    case VkResult::VK_RESULT_MAX_ENUM:
+        return "VK_RESULT_MAX_ENUM";
     }
     return "Unknown";
 }
@@ -558,7 +598,10 @@ Semaphore Device::CreateSemaphore() const {
         .pNext = nullptr,
         .flags = 0,
     };
+    return CreateSemaphore(ci);
+}
 
+Semaphore Device::CreateSemaphore(const VkSemaphoreCreateInfo& ci) const {
     VkSemaphore object;
     Check(dld->vkCreateSemaphore(handle, &ci, nullptr, &object));
     return Semaphore(object, handle, *dld);
@@ -644,7 +687,7 @@ ShaderModule Device::CreateShaderModule(const VkShaderModuleCreateInfo& ci) cons
     return ShaderModule(object, handle, *dld);
 }
 
-Event Device::CreateNewEvent() const {
+Event Device::CreateEvent() const {
     static constexpr VkEventCreateInfo ci{
         .sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO,
         .pNext = nullptr,

@@ -25,9 +25,9 @@
 #include "video_core/renderer_vulkan/renderer_vulkan.h"
 #include "video_core/renderer_vulkan/vk_blit_screen.h"
 #include "video_core/renderer_vulkan/vk_device.h"
+#include "video_core/renderer_vulkan/vk_master_semaphore.h"
 #include "video_core/renderer_vulkan/vk_memory_manager.h"
 #include "video_core/renderer_vulkan/vk_rasterizer.h"
-#include "video_core/renderer_vulkan/vk_resource_manager.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/renderer_vulkan/vk_state_tracker.h"
 #include "video_core/renderer_vulkan/vk_swapchain.h"
@@ -56,7 +56,7 @@ VkBool32 DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity,
                        VkDebugUtilsMessageTypeFlagsEXT type,
                        const VkDebugUtilsMessengerCallbackDataEXT* data,
                        [[maybe_unused]] void* user_data) {
-    const char* message{data->pMessage};
+    const char* const message{data->pMessage};
 
     if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
         LOG_CRITICAL(Render_Vulkan, "{}", message);
@@ -86,7 +86,7 @@ Common::DynamicLibrary OpenVulkanLibrary() {
     if (!library.Open(filename.c_str())) {
         // Android devices may not have libvulkan.so.1, only libvulkan.so.
         filename = Common::DynamicLibrary::GetVersionedFilename("vulkan");
-        library.Open(filename.c_str());
+        (void)library.Open(filename.c_str());
     }
 #endif
     return library;
@@ -237,10 +237,12 @@ std::string BuildCommaSeparatedExtensions(std::vector<std::string> available_ext
 
 } // Anonymous namespace
 
-RendererVulkan::RendererVulkan(Core::System& system_, Core::Frontend::EmuWindow& emu_window,
-                               Tegra::GPU& gpu_,
+RendererVulkan::RendererVulkan(Core::TelemetrySession& telemetry_session_,
+                               Core::Frontend::EmuWindow& emu_window,
+                               Core::Memory::Memory& cpu_memory_, Tegra::GPU& gpu_,
                                std::unique_ptr<Core::Frontend::GraphicsContext> context)
-    : RendererBase{emu_window, std::move(context)}, system{system_}, gpu{gpu_} {}
+    : RendererBase{emu_window, std::move(context)}, telemetry_session{telemetry_session_},
+      cpu_memory{cpu_memory_}, gpu{gpu_} {}
 
 RendererVulkan::~RendererVulkan() {
     ShutDown();
@@ -267,11 +269,11 @@ void RendererVulkan::SwapBuffers(const Tegra::FramebufferConfig* framebuffer) {
         scheduler->WaitWorker();
 
         swapchain->AcquireNextImage();
-        const auto [fence, render_semaphore] = blit_screen->Draw(*framebuffer, use_accelerated);
+        const VkSemaphore render_semaphore = blit_screen->Draw(*framebuffer, use_accelerated);
 
-        scheduler->Flush(false, render_semaphore);
+        scheduler->Flush(render_semaphore);
 
-        if (swapchain->Present(render_semaphore, fence)) {
+        if (swapchain->Present(render_semaphore)) {
             blit_screen->Recreate();
         }
 
@@ -279,11 +281,6 @@ void RendererVulkan::SwapBuffers(const Tegra::FramebufferConfig* framebuffer) {
     }
 
     render_window.PollEvents();
-}
-
-bool RendererVulkan::TryPresent(int /*timeout_ms*/) {
-    // TODO (bunnei): ImplementMe
-    return true;
 }
 
 bool RendererVulkan::Init() {
@@ -298,23 +295,21 @@ bool RendererVulkan::Init() {
 
     memory_manager = std::make_unique<VKMemoryManager>(*device);
 
-    resource_manager = std::make_unique<VKResourceManager>(*device);
+    state_tracker = std::make_unique<StateTracker>(gpu);
+
+    scheduler = std::make_unique<VKScheduler>(*device, *state_tracker);
 
     const auto& framebuffer = render_window.GetFramebufferLayout();
-    swapchain = std::make_unique<VKSwapchain>(*surface, *device);
+    swapchain = std::make_unique<VKSwapchain>(*surface, *device, *scheduler);
     swapchain->Create(framebuffer.width, framebuffer.height, false);
 
-    state_tracker = std::make_unique<StateTracker>(system);
+    rasterizer = std::make_unique<RasterizerVulkan>(render_window, gpu, gpu.MemoryManager(),
+                                                    cpu_memory, screen_info, *device,
+                                                    *memory_manager, *state_tracker, *scheduler);
 
-    scheduler = std::make_unique<VKScheduler>(*device, *resource_manager, *state_tracker);
-
-    rasterizer = std::make_unique<RasterizerVulkan>(system, render_window, screen_info, *device,
-                                                    *resource_manager, *memory_manager,
-                                                    *state_tracker, *scheduler);
-
-    blit_screen = std::make_unique<VKBlitScreen>(system, render_window, *rasterizer, *device,
-                                                 *resource_manager, *memory_manager, *swapchain,
-                                                 *scheduler, screen_info);
+    blit_screen =
+        std::make_unique<VKBlitScreen>(cpu_memory, render_window, *rasterizer, *device,
+                                       *memory_manager, *swapchain, *scheduler, screen_info);
 
     return true;
 }
@@ -332,7 +327,6 @@ void RendererVulkan::ShutDown() {
     scheduler.reset();
     swapchain.reset();
     memory_manager.reset();
-    resource_manager.reset();
     device.reset();
 }
 
@@ -440,8 +434,7 @@ void RendererVulkan::Report() const {
     LOG_INFO(Render_Vulkan, "Device: {}", model_name);
     LOG_INFO(Render_Vulkan, "Vulkan: {}", api_version);
 
-    auto& telemetry_session = system.TelemetrySession();
-    constexpr auto field = Common::Telemetry::FieldType::UserSystem;
+    static constexpr auto field = Common::Telemetry::FieldType::UserSystem;
     telemetry_session.AddField(field, "GPU_Vendor", vendor_name);
     telemetry_session.AddField(field, "GPU_Model", model_name);
     telemetry_session.AddField(field, "GPU_Vulkan_Driver", driver_name);

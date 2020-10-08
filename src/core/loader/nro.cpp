@@ -208,7 +208,7 @@ bool AppLoader_NRO::LoadNro(Kernel::Process& process, const FileSys::VfsFile& fi
     return LoadNroImpl(process, file.ReadAllBytes(), file.GetName());
 }
 
-AppLoader_NRO::LoadResult AppLoader_NRO::Load(Kernel::Process& process) {
+AppLoader_NRO::LoadResult AppLoader_NRO::Load(Kernel::Process& process, Core::System& system) {
     if (is_loaded) {
         return {ResultStatus::ErrorAlreadyLoaded, {}};
     }
@@ -218,8 +218,8 @@ AppLoader_NRO::LoadResult AppLoader_NRO::Load(Kernel::Process& process) {
     }
 
     if (romfs != nullptr) {
-        Core::System::GetInstance().GetFileSystemController().RegisterRomFS(
-            std::make_unique<FileSys::RomFSFactory>(*this));
+        system.GetFileSystemController().RegisterRomFS(std::make_unique<FileSys::RomFSFactory>(
+            *this, system.GetContentProvider(), system.GetFileSystemController()));
     }
 
     is_loaded = true;

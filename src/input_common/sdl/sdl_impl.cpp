@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <functional>
 #include <mutex>
@@ -21,6 +22,7 @@
 #include "common/param_package.h"
 #include "common/threadsafe_queue.h"
 #include "core/frontend/input.h"
+#include "input_common/motion_input.h"
 #include "input_common/sdl/sdl_impl.h"
 #include "input_common/settings.h"
 
@@ -78,6 +80,33 @@ public:
         return state.axes.at(axis) / (32767.0f * range);
     }
 
+    bool RumblePlay(f32 amp_low, f32 amp_high, int time) {
+        const u16 raw_amp_low = static_cast<u16>(amp_low * 0xFFFF);
+        const u16 raw_amp_high = static_cast<u16>(amp_high * 0xFFFF);
+        // Lower drastically the number of state changes
+        if (raw_amp_low >> 11 == last_state_rumble_low >> 11 &&
+            raw_amp_high >> 11 == last_state_rumble_high >> 11) {
+            if (raw_amp_low + raw_amp_high != 0 ||
+                last_state_rumble_low + last_state_rumble_high == 0) {
+                return false;
+            }
+        }
+        // Don't change state if last vibration was < 20ms
+        const auto now = std::chrono::system_clock::now();
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_vibration) <
+            std::chrono::milliseconds(20)) {
+            return raw_amp_low + raw_amp_high == 0;
+        }
+
+        last_vibration = now;
+        last_state_rumble_low = raw_amp_low;
+        last_state_rumble_high = raw_amp_high;
+        if (sdl_joystick) {
+            SDL_JoystickRumble(sdl_joystick.get(), raw_amp_low, raw_amp_high, time);
+        }
+        return false;
+    }
+
     std::tuple<float, float> GetAnalog(int axis_x, int axis_y, float range) const {
         float x = GetAxis(axis_x, range);
         float y = GetAxis(axis_y, range);
@@ -93,6 +122,10 @@ public:
         }
 
         return std::make_tuple(x, y);
+    }
+
+    const InputCommon::MotionInput& GetMotion() const {
+        return motion;
     }
 
     void SetHat(int hat, Uint8 direction) {
@@ -139,9 +172,15 @@ private:
     } state;
     std::string guid;
     int port;
+    u16 last_state_rumble_high;
+    u16 last_state_rumble_low;
+    std::chrono::time_point<std::chrono::system_clock> last_vibration;
     std::unique_ptr<SDL_Joystick, decltype(&SDL_JoystickClose)> sdl_joystick;
     std::unique_ptr<SDL_GameController, decltype(&SDL_GameControllerClose)> sdl_controller;
     mutable std::mutex mutex;
+
+    // motion is initalized without PID values as motion input is not aviable for SDL2
+    InputCommon::MotionInput motion{0.0f, 0.0f, 0.0f};
 };
 
 std::shared_ptr<SDLJoystick> SDLState::GetSDLJoystickByGUID(const std::string& guid, int port) {
@@ -207,7 +246,7 @@ void SDLState::InitJoystick(int joystick_index) {
         sdl_gamecontroller = SDL_GameControllerOpen(joystick_index);
     }
     if (!sdl_joystick) {
-        LOG_ERROR(Input, "failed to open joystick {}", joystick_index);
+        LOG_ERROR(Input, "Failed to open joystick {}", joystick_index);
         return;
     }
     const std::string guid = GetGUID(sdl_joystick);
@@ -303,6 +342,12 @@ public:
         return joystick->GetButton(button);
     }
 
+    bool SetRumblePlay(f32 amp_high, f32 amp_low, f32 freq_high, f32 freq_low) const override {
+        const f32 new_amp_low = pow(amp_low, 0.5f) * (3.0f - 2.0f * pow(amp_low, 0.15f));
+        const f32 new_amp_high = pow(amp_high, 0.5f) * (3.0f - 2.0f * pow(amp_high, 0.15f));
+        return joystick->RumblePlay(new_amp_low, new_amp_high, 250);
+    }
+
 private:
     std::shared_ptr<SDLJoystick> joystick;
     int button;
@@ -384,6 +429,68 @@ private:
     const int axis_y;
     const float deadzone;
     const float range;
+};
+
+class SDLDirectionMotion final : public Input::MotionDevice {
+public:
+    explicit SDLDirectionMotion(std::shared_ptr<SDLJoystick> joystick_, int hat_, Uint8 direction_)
+        : joystick(std::move(joystick_)), hat(hat_), direction(direction_) {}
+
+    Input::MotionStatus GetStatus() const override {
+        if (joystick->GetHatDirection(hat, direction)) {
+            return joystick->GetMotion().GetRandomMotion(2, 6);
+        }
+        return joystick->GetMotion().GetRandomMotion(0, 0);
+    }
+
+private:
+    std::shared_ptr<SDLJoystick> joystick;
+    int hat;
+    Uint8 direction;
+};
+
+class SDLAxisMotion final : public Input::MotionDevice {
+public:
+    explicit SDLAxisMotion(std::shared_ptr<SDLJoystick> joystick_, int axis_, float threshold_,
+                           bool trigger_if_greater_)
+        : joystick(std::move(joystick_)), axis(axis_), threshold(threshold_),
+          trigger_if_greater(trigger_if_greater_) {}
+
+    Input::MotionStatus GetStatus() const override {
+        const float axis_value = joystick->GetAxis(axis, 1.0f);
+        bool trigger = axis_value < threshold;
+        if (trigger_if_greater) {
+            trigger = axis_value > threshold;
+        }
+
+        if (trigger) {
+            return joystick->GetMotion().GetRandomMotion(2, 6);
+        }
+        return joystick->GetMotion().GetRandomMotion(0, 0);
+    }
+
+private:
+    std::shared_ptr<SDLJoystick> joystick;
+    int axis;
+    float threshold;
+    bool trigger_if_greater;
+};
+
+class SDLButtonMotion final : public Input::MotionDevice {
+public:
+    explicit SDLButtonMotion(std::shared_ptr<SDLJoystick> joystick_, int button_)
+        : joystick(std::move(joystick_)), button(button_) {}
+
+    Input::MotionStatus GetStatus() const override {
+        if (joystick->GetButton(button)) {
+            return joystick->GetMotion().GetRandomMotion(2, 6);
+        }
+        return joystick->GetMotion().GetRandomMotion(0, 0);
+    }
+
+private:
+    std::shared_ptr<SDLJoystick> joystick;
+    int button;
 };
 
 /// A button device factory that creates button devices from SDL joystick
@@ -492,12 +599,78 @@ private:
     SDLState& state;
 };
 
+/// A motion device factory that creates motion devices from SDL joystick
+class SDLMotionFactory final : public Input::Factory<Input::MotionDevice> {
+public:
+    explicit SDLMotionFactory(SDLState& state_) : state(state_) {}
+    /**
+     * Creates motion device from joystick axes
+     * @param params contains parameters for creating the device:
+     *     - "guid": the guid of the joystick to bind
+     *     - "port": the nth joystick of the same type
+     */
+    std::unique_ptr<Input::MotionDevice> Create(const Common::ParamPackage& params) override {
+        const std::string guid = params.Get("guid", "0");
+        const int port = params.Get("port", 0);
+
+        auto joystick = state.GetSDLJoystickByGUID(guid, port);
+
+        if (params.Has("hat")) {
+            const int hat = params.Get("hat", 0);
+            const std::string direction_name = params.Get("direction", "");
+            Uint8 direction;
+            if (direction_name == "up") {
+                direction = SDL_HAT_UP;
+            } else if (direction_name == "down") {
+                direction = SDL_HAT_DOWN;
+            } else if (direction_name == "left") {
+                direction = SDL_HAT_LEFT;
+            } else if (direction_name == "right") {
+                direction = SDL_HAT_RIGHT;
+            } else {
+                direction = 0;
+            }
+            // This is necessary so accessing GetHat with hat won't crash
+            joystick->SetHat(hat, SDL_HAT_CENTERED);
+            return std::make_unique<SDLDirectionMotion>(joystick, hat, direction);
+        }
+
+        if (params.Has("axis")) {
+            const int axis = params.Get("axis", 0);
+            const float threshold = params.Get("threshold", 0.5f);
+            const std::string direction_name = params.Get("direction", "");
+            bool trigger_if_greater;
+            if (direction_name == "+") {
+                trigger_if_greater = true;
+            } else if (direction_name == "-") {
+                trigger_if_greater = false;
+            } else {
+                trigger_if_greater = true;
+                LOG_ERROR(Input, "Unknown direction {}", direction_name);
+            }
+            // This is necessary so accessing GetAxis with axis won't crash
+            joystick->SetAxis(axis, 0);
+            return std::make_unique<SDLAxisMotion>(joystick, axis, threshold, trigger_if_greater);
+        }
+
+        const int button = params.Get("button", 0);
+        // This is necessary so accessing GetButton with button won't crash
+        joystick->SetButton(button, false);
+        return std::make_unique<SDLButtonMotion>(joystick, button);
+    }
+
+private:
+    SDLState& state;
+};
+
 SDLState::SDLState() {
     using namespace Input;
     analog_factory = std::make_shared<SDLAnalogFactory>(*this);
     button_factory = std::make_shared<SDLButtonFactory>(*this);
+    motion_factory = std::make_shared<SDLMotionFactory>(*this);
     RegisterFactory<AnalogDevice>("sdl", analog_factory);
     RegisterFactory<ButtonDevice>("sdl", button_factory);
+    RegisterFactory<MotionDevice>("sdl", motion_factory);
 
     // If the frontend is going to manage the event loop, then we dont start one here
     start_thread = !SDL_WasInit(SDL_INIT_JOYSTICK);
@@ -533,6 +706,7 @@ SDLState::~SDLState() {
     using namespace Input;
     UnregisterFactory<ButtonDevice>("sdl");
     UnregisterFactory<AnalogDevice>("sdl");
+    UnregisterFactory<MotionDevice>("sdl");
 
     CloseJoysticks();
     SDL_DelEventWatch(&SDLEventWatcher, this);
@@ -624,6 +798,27 @@ Common::ParamPackage BuildHatParamPackageForButton(int port, std::string guid, u
 }
 
 Common::ParamPackage SDLEventToButtonParamPackage(SDLState& state, const SDL_Event& event) {
+    switch (event.type) {
+    case SDL_JOYAXISMOTION: {
+        const auto joystick = state.GetSDLJoystickBySDLID(event.jaxis.which);
+        return BuildAnalogParamPackageForButton(joystick->GetPort(), joystick->GetGUID(),
+                                                event.jaxis.axis, event.jaxis.value);
+    }
+    case SDL_JOYBUTTONUP: {
+        const auto joystick = state.GetSDLJoystickBySDLID(event.jbutton.which);
+        return BuildButtonParamPackageForButton(joystick->GetPort(), joystick->GetGUID(),
+                                                event.jbutton.button);
+    }
+    case SDL_JOYHATMOTION: {
+        const auto joystick = state.GetSDLJoystickBySDLID(event.jhat.which);
+        return BuildHatParamPackageForButton(joystick->GetPort(), joystick->GetGUID(),
+                                             event.jhat.hat, event.jhat.value);
+    }
+    }
+    return {};
+}
+
+Common::ParamPackage SDLEventToMotionParamPackage(SDLState& state, const SDL_Event& event) {
     switch (event.type) {
     case SDL_JOYAXISMOTION: {
         const auto joystick = state.GetSDLJoystickBySDLID(event.jaxis.which);
@@ -809,6 +1004,35 @@ public:
     }
 };
 
+class SDLMotionPoller final : public SDLPoller {
+public:
+    explicit SDLMotionPoller(SDLState& state_) : SDLPoller(state_) {}
+
+    Common::ParamPackage GetNextInput() override {
+        SDL_Event event;
+        while (state.event_queue.Pop(event)) {
+            const auto package = FromEvent(event);
+            if (package) {
+                return *package;
+            }
+        }
+        return {};
+    }
+    [[nodiscard]] std::optional<Common::ParamPackage> FromEvent(const SDL_Event& event) const {
+        switch (event.type) {
+        case SDL_JOYAXISMOTION:
+            if (std::abs(event.jaxis.value / 32767.0) < 0.5) {
+                break;
+            }
+            [[fallthrough]];
+        case SDL_JOYBUTTONUP:
+        case SDL_JOYHATMOTION:
+            return {SDLEventToMotionParamPackage(state, event)};
+        }
+        return std::nullopt;
+    }
+};
+
 /**
  * Attempts to match the press to a controller joy axis (left/right stick) and if a match
  * isn't found, checks if the event matches anything from SDLButtonPoller and uses that
@@ -899,6 +1123,9 @@ SDLState::Pollers SDLState::GetPollers(InputCommon::Polling::DeviceType type) {
         break;
     case InputCommon::Polling::DeviceType::Button:
         pollers.emplace_back(std::make_unique<Polling::SDLButtonPoller>(*this));
+        break;
+    case InputCommon::Polling::DeviceType::Motion:
+        pollers.emplace_back(std::make_unique<Polling::SDLMotionPoller>(*this));
         break;
     }
 

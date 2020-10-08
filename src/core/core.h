@@ -124,7 +124,7 @@ public:
      * Gets the instance of the System singleton class.
      * @returns Reference to the instance of the System singleton class.
      */
-    static System& GetInstance() {
+    [[deprecated("Use of the global system instance is deprecated")]] static System& GetInstance() {
         return s_instance;
     }
 
@@ -326,9 +326,9 @@ public:
     Service::SM::ServiceManager& ServiceManager();
     const Service::SM::ServiceManager& ServiceManager() const;
 
-    void SetFilesystem(std::shared_ptr<FileSys::VfsFilesystem> vfs);
+    void SetFilesystem(FileSys::VirtualFilesystem vfs);
 
-    std::shared_ptr<FileSys::VfsFilesystem> GetFilesystem() const;
+    FileSys::VirtualFilesystem GetFilesystem() const;
 
     void RegisterCheatList(const std::vector<Memory::CheatEntry>& list,
                            const std::array<u8, 0x20>& build_id, VAddr main_region_begin,

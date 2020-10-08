@@ -12,11 +12,9 @@
 #include "common/assert.h"
 #include "common/common_types.h"
 #include "common/math_util.h"
-
 #include "core/core.h"
 #include "core/frontend/emu_window.h"
 #include "core/memory.h"
-
 #include "video_core/gpu.h"
 #include "video_core/morton.h"
 #include "video_core/rasterizer_interface.h"
@@ -24,8 +22,8 @@
 #include "video_core/renderer_vulkan/vk_blit_screen.h"
 #include "video_core/renderer_vulkan/vk_device.h"
 #include "video_core/renderer_vulkan/vk_image.h"
+#include "video_core/renderer_vulkan/vk_master_semaphore.h"
 #include "video_core/renderer_vulkan/vk_memory_manager.h"
-#include "video_core/renderer_vulkan/vk_resource_manager.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
 #include "video_core/renderer_vulkan/vk_swapchain.h"
@@ -210,17 +208,15 @@ struct VKBlitScreen::BufferData {
     // Unaligned image data goes here
 };
 
-VKBlitScreen::VKBlitScreen(Core::System& system, Core::Frontend::EmuWindow& render_window,
-                           VideoCore::RasterizerInterface& rasterizer, const VKDevice& device,
-                           VKResourceManager& resource_manager, VKMemoryManager& memory_manager,
-                           VKSwapchain& swapchain, VKScheduler& scheduler,
-                           const VKScreenInfo& screen_info)
-    : system{system}, render_window{render_window}, rasterizer{rasterizer}, device{device},
-      resource_manager{resource_manager}, memory_manager{memory_manager}, swapchain{swapchain},
-      scheduler{scheduler}, image_count{swapchain.GetImageCount()}, screen_info{screen_info} {
-    watches.resize(image_count);
-    std::generate(watches.begin(), watches.end(),
-                  []() { return std::make_unique<VKFenceWatch>(); });
+VKBlitScreen::VKBlitScreen(Core::Memory::Memory& cpu_memory_,
+                           Core::Frontend::EmuWindow& render_window_,
+                           VideoCore::RasterizerInterface& rasterizer_, const VKDevice& device_,
+                           VKMemoryManager& memory_manager_, VKSwapchain& swapchain_,
+                           VKScheduler& scheduler_, const VKScreenInfo& screen_info_)
+    : cpu_memory{cpu_memory_}, render_window{render_window_}, rasterizer{rasterizer_},
+      device{device_}, memory_manager{memory_manager_}, swapchain{swapchain_},
+      scheduler{scheduler_}, image_count{swapchain.GetImageCount()}, screen_info{screen_info_} {
+    resource_ticks.resize(image_count);
 
     CreateStaticResources();
     CreateDynamicResources();
@@ -232,15 +228,16 @@ void VKBlitScreen::Recreate() {
     CreateDynamicResources();
 }
 
-std::tuple<VKFence&, VkSemaphore> VKBlitScreen::Draw(const Tegra::FramebufferConfig& framebuffer,
-                                                     bool use_accelerated) {
+VkSemaphore VKBlitScreen::Draw(const Tegra::FramebufferConfig& framebuffer, bool use_accelerated) {
     RefreshResources(framebuffer);
 
     // Finish any pending renderpass
     scheduler.RequestOutsideRenderPassOperationContext();
 
     const std::size_t image_index = swapchain.GetImageIndex();
-    watches[image_index]->Watch(scheduler.GetFence());
+
+    scheduler.Wait(resource_ticks[image_index]);
+    resource_ticks[image_index] = scheduler.CurrentTick();
 
     VKImage* blit_image = use_accelerated ? screen_info.image : raw_images[image_index].get();
 
@@ -259,7 +256,7 @@ std::tuple<VKFence&, VkSemaphore> VKBlitScreen::Draw(const Tegra::FramebufferCon
         const auto pixel_format =
             VideoCore::Surface::PixelFormatFromGPUPixelFormat(framebuffer.pixel_format);
         const VAddr framebuffer_addr = framebuffer.address + framebuffer.offset;
-        const auto host_ptr = system.Memory().GetPointer(framebuffer_addr);
+        const auto host_ptr = cpu_memory.GetPointer(framebuffer_addr);
         rasterizer.FlushRegion(ToCacheAddr(host_ptr), GetSizeInBytes(framebuffer));
 
         // TODO(Rodrigo): Read this from HLE
@@ -343,7 +340,7 @@ std::tuple<VKFence&, VkSemaphore> VKBlitScreen::Draw(const Tegra::FramebufferCon
         cmdbuf.EndRenderPass();
     });
 
-    return {scheduler.GetFence(), *semaphores[image_index]};
+    return *semaphores[image_index];
 }
 
 void VKBlitScreen::CreateStaticResources() {
@@ -711,7 +708,7 @@ void VKBlitScreen::CreateFramebuffers() {
 
 void VKBlitScreen::ReleaseRawImages() {
     for (std::size_t i = 0; i < raw_images.size(); ++i) {
-        watches[i]->Wait();
+        scheduler.Wait(resource_ticks.at(i));
     }
     raw_images.clear();
     raw_buffer_commits.clear();

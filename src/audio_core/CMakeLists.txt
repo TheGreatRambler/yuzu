@@ -12,21 +12,47 @@ add_library(audio_core STATIC
     buffer.h
     codec.cpp
     codec.h
+    command_generator.cpp
+    command_generator.h
     common.h
+    effect_context.cpp
+    effect_context.h
+    info_updater.cpp
+    info_updater.h
+    memory_pool.cpp
+    memory_pool.h
+    mix_context.cpp
+    mix_context.h
     null_sink.h
     sink.h
+    sink_context.cpp
+    sink_context.h
     sink_details.cpp
     sink_details.h
     sink_stream.h
+    splitter_context.cpp
+    splitter_context.h
     stream.cpp
     stream.h
     time_stretch.cpp
     time_stretch.h
+    voice_context.cpp
+    voice_context.h
 
     $<$<BOOL:${ENABLE_CUBEB}>:cubeb_sink.cpp cubeb_sink.h>
 )
 
 create_target_directory_groups(audio_core)
+
+if (NOT MSVC)
+    target_compile_options(audio_core PRIVATE
+        -Werror=ignored-qualifiers
+        -Werror=implicit-fallthrough
+        -Werror=reorder
+        -Werror=sign-compare
+        -Werror=unused-variable
+    )
+endif()
 
 target_link_libraries(audio_core PUBLIC common core)
 target_link_libraries(audio_core PRIVATE SoundTouch)

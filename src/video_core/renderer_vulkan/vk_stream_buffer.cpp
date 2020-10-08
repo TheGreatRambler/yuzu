@@ -11,7 +11,6 @@
 #include "common/alignment.h"
 #include "common/assert.h"
 #include "video_core/renderer_vulkan/vk_device.h"
-#include "video_core/renderer_vulkan/vk_resource_manager.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/renderer_vulkan/vk_stream_buffer.h"
 #include "video_core/renderer_vulkan/wrapper.h"
@@ -57,9 +56,9 @@ u32 GetMemoryType(const VkPhysicalDeviceMemoryProperties& properties,
 
 } // Anonymous namespace
 
-VKStreamBuffer::VKStreamBuffer(const VKDevice& device, VKScheduler& scheduler,
+VKStreamBuffer::VKStreamBuffer(const VKDevice& device_, VKScheduler& scheduler_,
                                VkBufferUsageFlags usage)
-    : device{device}, scheduler{scheduler} {
+    : device{device_}, scheduler{scheduler_} {
     CreateBuffers(usage);
     ReserveWatches(current_watches, WATCHES_INITIAL_RESERVE);
     ReserveWatches(previous_watches, WATCHES_INITIAL_RESERVE);
@@ -111,7 +110,7 @@ void VKStreamBuffer::Unmap(u64 size) {
     }
     auto& watch = current_watches[current_watch_cursor++];
     watch.upper_bound = offset;
-    watch.fence.Watch(scheduler.GetFence());
+    watch.tick = scheduler.CurrentTick();
 }
 
 void VKStreamBuffer::CreateBuffers(VkBufferUsageFlags usage) {
@@ -121,7 +120,8 @@ void VKStreamBuffer::CreateBuffers(VkBufferUsageFlags usage) {
 
     // Substract from the preferred heap size some bytes to avoid getting out of memory.
     const VkDeviceSize heap_size = memory_properties.memoryHeaps[preferred_heap].size;
-    const VkDeviceSize allocable_size = heap_size - 9 * 1024 * 1024;
+    // As per DXVK's example, using `heap_size / 2`
+    const VkDeviceSize allocable_size = heap_size / 2;
     buffer = device.GetLogical().CreateBuffer({
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .pNext = nullptr,
@@ -157,7 +157,7 @@ void VKStreamBuffer::WaitPendingOperations(u64 requested_upper_bound) {
     while (requested_upper_bound < wait_bound && wait_cursor < *invalidation_mark) {
         auto& watch = previous_watches[wait_cursor];
         wait_bound = watch.upper_bound;
-        watch.fence.Wait();
+        scheduler.Wait(watch.tick);
         ++wait_cursor;
     }
 }

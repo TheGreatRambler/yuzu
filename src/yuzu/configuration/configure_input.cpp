@@ -70,7 +70,8 @@ ConfigureInput::ConfigureInput(QWidget* parent)
 
 ConfigureInput::~ConfigureInput() = default;
 
-void ConfigureInput::Initialize(InputCommon::InputSubsystem* input_subsystem) {
+void ConfigureInput::Initialize(InputCommon::InputSubsystem* input_subsystem,
+                                std::size_t max_players) {
     player_controllers = {
         new ConfigureInputPlayer(this, 0, ui->consoleInputSettings, input_subsystem),
         new ConfigureInputPlayer(this, 1, ui->consoleInputSettings, input_subsystem),
@@ -93,6 +94,11 @@ void ConfigureInput::Initialize(InputCommon::InputSubsystem* input_subsystem) {
         ui->checkboxPlayer7Connected, ui->checkboxPlayer8Connected,
     };
 
+    std::array<QLabel*, 8> player_connected_labels = {
+        ui->label,   ui->label_3, ui->label_4, ui->label_5,
+        ui->label_6, ui->label_7, ui->label_8, ui->label_9,
+    };
+
     for (std::size_t i = 0; i < player_tabs.size(); ++i) {
         player_tabs[i]->setLayout(new QHBoxLayout(player_tabs[i]));
         player_tabs[i]->layout()->addWidget(player_controllers[i]);
@@ -112,6 +118,13 @@ void ConfigureInput::Initialize(InputCommon::InputSubsystem* input_subsystem) {
         connect(player_connected[i], &QCheckBox::stateChanged, [this, i](int state) {
             player_controllers[i]->ConnectPlayer(state == Qt::Checked);
         });
+
+        // Remove/hide all the elements that exceed max_players, if applicable.
+        if (i >= max_players) {
+            ui->tabWidget->removeTab(static_cast<int>(max_players));
+            player_connected[i]->hide();
+            player_connected_labels[i]->hide();
+        }
     }
     // Only the first player can choose handheld mode so connect the signal just to player 1
     connect(player_controllers[0], &ConfigureInputPlayer::HandheldStateChanged,
@@ -132,6 +145,10 @@ void ConfigureInput::Initialize(InputCommon::InputSubsystem* input_subsystem) {
             [this, input_subsystem] {
                 CallConfigureDialog<ConfigureMotionTouch>(*this, input_subsystem);
             });
+
+    connect(ui->motionButton, &QPushButton::clicked, [this, input_subsystem] {
+        CallConfigureDialog<ConfigureMotionTouch>(*this, input_subsystem);
+    });
 
     connect(ui->buttonClearAll, &QPushButton::clicked, [this] { ClearAll(); });
     connect(ui->buttonRestoreDefaults, &QPushButton::clicked, [this] { RestoreDefaults(); });
@@ -159,6 +176,7 @@ void ConfigureInput::ApplyConfiguration() {
     OnDockedModeChanged(pre_docked_mode, Settings::values.use_docked_mode);
 
     Settings::values.vibration_enabled = ui->vibrationGroup->isChecked();
+    Settings::values.motion_enabled = ui->motionGroup->isChecked();
 }
 
 void ConfigureInput::changeEvent(QEvent* event) {
@@ -175,10 +193,10 @@ void ConfigureInput::RetranslateUI() {
 
 void ConfigureInput::LoadConfiguration() {
     LoadPlayerControllerIndices();
-    UpdateDockedState(Settings::values.players[0].controller_type ==
-                      Settings::ControllerType::Handheld);
+    UpdateDockedState(Settings::values.players[8].connected);
 
     ui->vibrationGroup->setChecked(Settings::values.vibration_enabled);
+    ui->motionGroup->setChecked(Settings::values.motion_enabled);
 }
 
 void ConfigureInput::LoadPlayerControllerIndices() {
@@ -205,17 +223,18 @@ void ConfigureInput::RestoreDefaults() {
     ui->radioDocked->setChecked(true);
     ui->radioUndocked->setChecked(false);
     ui->vibrationGroup->setChecked(true);
+    ui->motionGroup->setChecked(true);
 }
 
 void ConfigureInput::UpdateDockedState(bool is_handheld) {
-    // If the controller type is handheld only, disallow changing docked mode
+    // Disallow changing the console mode if the controller type is handheld.
     ui->radioDocked->setEnabled(!is_handheld);
     ui->radioUndocked->setEnabled(!is_handheld);
 
     ui->radioDocked->setChecked(Settings::values.use_docked_mode);
     ui->radioUndocked->setChecked(!Settings::values.use_docked_mode);
 
-    // If its handheld only, force docked mode off (since you can't play handheld in a dock)
+    // Also force into undocked mode if the controller type is handheld.
     if (is_handheld) {
         ui->radioUndocked->setChecked(true);
     }

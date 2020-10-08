@@ -25,7 +25,6 @@
 #include "video_core/renderer_vulkan/vk_pipeline_cache.h"
 #include "video_core/renderer_vulkan/vk_query_cache.h"
 #include "video_core/renderer_vulkan/vk_renderpass_cache.h"
-#include "video_core/renderer_vulkan/vk_resource_manager.h"
 #include "video_core/renderer_vulkan/vk_sampler_cache.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/renderer_vulkan/vk_staging_buffer_pool.h"
@@ -106,10 +105,11 @@ struct ImageView {
 
 class RasterizerVulkan final : public VideoCore::RasterizerAccelerated {
 public:
-    explicit RasterizerVulkan(Core::System& system, Core::Frontend::EmuWindow& render_window,
+    explicit RasterizerVulkan(Core::Frontend::EmuWindow& emu_window, Tegra::GPU& gpu,
+                              Tegra::MemoryManager& gpu_memory, Core::Memory::Memory& cpu_memory,
                               VKScreenInfo& screen_info, const VKDevice& device,
-                              VKResourceManager& resource_manager, VKMemoryManager& memory_manager,
-                              StateTracker& state_tracker, VKScheduler& scheduler);
+                              VKMemoryManager& memory_manager, StateTracker& state_tracker,
+                              VKScheduler& scheduler);
     ~RasterizerVulkan() override;
 
     void Draw(bool is_indexed, bool is_instanced) override;
@@ -135,7 +135,6 @@ public:
                                const Tegra::Engines::Fermi2D::Config& copy_config) override;
     bool AccelerateDisplay(const Tegra::FramebufferConfig& config, VAddr framebuffer_addr,
                            u32 pixel_stride) override;
-    void SetupDirtyFlags() override;
 
     VideoCommon::Shader::AsyncShaders& GetAsyncShaders() {
         return async_shaders;
@@ -279,11 +278,13 @@ private:
 
     VkBuffer DefaultBuffer();
 
-    Core::System& system;
-    Core::Frontend::EmuWindow& render_window;
+    Tegra::GPU& gpu;
+    Tegra::MemoryManager& gpu_memory;
+    Tegra::Engines::Maxwell3D& maxwell3d;
+    Tegra::Engines::KeplerCompute& kepler_compute;
+
     VKScreenInfo& screen_info;
     const VKDevice& device;
-    VKResourceManager& resource_manager;
     VKMemoryManager& memory_manager;
     StateTracker& state_tracker;
     VKScheduler& scheduler;
@@ -300,8 +301,8 @@ private:
     VKPipelineCache pipeline_cache;
     VKBufferCache buffer_cache;
     VKSamplerCache sampler_cache;
-    VKFenceManager fence_manager;
     VKQueryCache query_cache;
+    VKFenceManager fence_manager;
 
     vk::Buffer default_buffer;
     VKMemoryCommit default_buffer_commit;

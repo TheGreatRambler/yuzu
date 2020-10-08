@@ -5,14 +5,16 @@
 #pragma once
 
 #include <memory>
-#include <tuple>
 
 #include "video_core/renderer_vulkan/vk_memory_manager.h"
-#include "video_core/renderer_vulkan/vk_resource_manager.h"
 #include "video_core/renderer_vulkan/wrapper.h"
 
 namespace Core {
 class System;
+}
+
+namespace Core::Memory {
+class Memory;
 }
 
 namespace Core::Frontend {
@@ -30,26 +32,26 @@ class RasterizerInterface;
 namespace Vulkan {
 
 struct ScreenInfo;
+
 class RasterizerVulkan;
 class VKDevice;
-class VKFence;
 class VKImage;
 class VKScheduler;
 class VKSwapchain;
 
 class VKBlitScreen final {
 public:
-    explicit VKBlitScreen(Core::System& system, Core::Frontend::EmuWindow& render_window,
+    explicit VKBlitScreen(Core::Memory::Memory& cpu_memory,
+                          Core::Frontend::EmuWindow& render_window,
                           VideoCore::RasterizerInterface& rasterizer, const VKDevice& device,
-                          VKResourceManager& resource_manager, VKMemoryManager& memory_manager,
-                          VKSwapchain& swapchain, VKScheduler& scheduler,
-                          const VKScreenInfo& screen_info);
+                          VKMemoryManager& memory_manager, VKSwapchain& swapchain,
+                          VKScheduler& scheduler, const VKScreenInfo& screen_info);
     ~VKBlitScreen();
 
     void Recreate();
 
-    std::tuple<VKFence&, VkSemaphore> Draw(const Tegra::FramebufferConfig& framebuffer,
-                                           bool use_accelerated);
+    [[nodiscard]] VkSemaphore Draw(const Tegra::FramebufferConfig& framebuffer,
+                                   bool use_accelerated);
 
 private:
     struct BufferData;
@@ -81,11 +83,10 @@ private:
     u64 GetRawImageOffset(const Tegra::FramebufferConfig& framebuffer,
                           std::size_t image_index) const;
 
-    Core::System& system;
+    Core::Memory::Memory& cpu_memory;
     Core::Frontend::EmuWindow& render_window;
     VideoCore::RasterizerInterface& rasterizer;
     const VKDevice& device;
-    VKResourceManager& resource_manager;
     VKMemoryManager& memory_manager;
     VKSwapchain& swapchain;
     VKScheduler& scheduler;
@@ -106,7 +107,7 @@ private:
     vk::Buffer buffer;
     VKMemoryCommit buffer_commit;
 
-    std::vector<std::unique_ptr<VKFenceWatch>> watches;
+    std::vector<u64> resource_ticks;
 
     std::vector<vk::Semaphore> semaphores;
     std::vector<std::unique_ptr<VKImage>> raw_images;

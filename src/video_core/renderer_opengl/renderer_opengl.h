@@ -16,14 +16,23 @@
 
 namespace Core {
 class System;
-}
+class TelemetrySession;
+} // namespace Core
 
 namespace Core::Frontend {
 class EmuWindow;
 }
 
+namespace Core::Memory {
+class Memory;
+}
+
 namespace Layout {
 struct FramebufferLayout;
+}
+
+namespace Tegra {
+class GPU;
 }
 
 namespace OpenGL {
@@ -46,17 +55,10 @@ struct ScreenInfo {
     TextureInfo texture;
 };
 
-struct PresentationTexture {
-    u32 width = 0;
-    u32 height = 0;
-    OGLTexture texture;
-};
-
-class FrameMailbox;
-
 class RendererOpenGL final : public VideoCore::RendererBase {
 public:
-    explicit RendererOpenGL(Core::System& system, Core::Frontend::EmuWindow& emu_window,
+    explicit RendererOpenGL(Core::TelemetrySession& telemetry_session,
+                            Core::Frontend::EmuWindow& emu_window, Core::Memory::Memory& cpu_memory,
                             Tegra::GPU& gpu,
                             std::unique_ptr<Core::Frontend::GraphicsContext> context);
     ~RendererOpenGL() override;
@@ -64,7 +66,6 @@ public:
     bool Init() override;
     void ShutDown() override;
     void SwapBuffers(const Tegra::FramebufferConfig* framebuffer) override;
-    bool TryPresent(int timeout_ms) override;
 
 private:
     /// Initializes the OpenGL state and creates persistent objects.
@@ -92,14 +93,13 @@ private:
 
     void PrepareRendertarget(const Tegra::FramebufferConfig* framebuffer);
 
-    bool Present(int timeout_ms);
-
-    Core::System& system;
+    Core::TelemetrySession& telemetry_session;
     Core::Frontend::EmuWindow& emu_window;
+    Core::Memory::Memory& cpu_memory;
     Tegra::GPU& gpu;
-    const Device device;
 
-    StateTracker state_tracker{system};
+    const Device device;
+    StateTracker state_tracker{gpu};
 
     // OpenGL object IDs
     OGLBuffer vertex_buffer;
@@ -123,11 +123,6 @@ private:
     /// Used for transforming the framebuffer orientation
     Tegra::FramebufferConfig::TransformFlags framebuffer_transform_flags{};
     Common::Rectangle<int> framebuffer_crop_rect;
-
-    /// Frame presentation mailbox
-    std::unique_ptr<FrameMailbox> frame_mailbox;
-
-    bool has_debug_tool = false;
 };
 
 } // namespace OpenGL

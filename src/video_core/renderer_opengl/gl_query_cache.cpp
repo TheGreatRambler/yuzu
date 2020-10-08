@@ -30,12 +30,11 @@ constexpr GLenum GetTarget(VideoCore::QueryType type) {
 
 } // Anonymous namespace
 
-QueryCache::QueryCache(Core::System& system, RasterizerOpenGL& gl_rasterizer)
-    : VideoCommon::QueryCacheBase<
-          QueryCache, CachedQuery, CounterStream, HostCounter,
-          std::vector<OGLQuery>>{system,
-                                 static_cast<VideoCore::RasterizerInterface&>(gl_rasterizer)},
-      gl_rasterizer{gl_rasterizer} {}
+QueryCache::QueryCache(RasterizerOpenGL& rasterizer, Tegra::Engines::Maxwell3D& maxwell3d,
+                       Tegra::MemoryManager& gpu_memory)
+    : VideoCommon::QueryCacheBase<QueryCache, CachedQuery, CounterStream, HostCounter>(
+          rasterizer, maxwell3d, gpu_memory),
+      gl_rasterizer{rasterizer} {}
 
 QueryCache::~QueryCache() = default;
 
@@ -89,6 +88,8 @@ u64 HostCounter::BlockingQuery() const {
 
 CachedQuery::CachedQuery(QueryCache& cache, VideoCore::QueryType type, VAddr cpu_addr, u8* host_ptr)
     : VideoCommon::CachedQueryBase<HostCounter>{cpu_addr, host_ptr}, cache{&cache}, type{type} {}
+
+CachedQuery::~CachedQuery() = default;
 
 CachedQuery::CachedQuery(CachedQuery&& rhs) noexcept
     : VideoCommon::CachedQueryBase<HostCounter>(std::move(rhs)), cache{rhs.cache}, type{rhs.type} {}

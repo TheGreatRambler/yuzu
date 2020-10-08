@@ -89,8 +89,6 @@ namespace Service {
     return function_string;
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
 ServiceFrameworkBase::ServiceFrameworkBase(const char* service_name, u32 max_sessions,
                                            InvokerFn* handler_invoker)
     : service_name(service_name), max_sessions(max_sessions), handler_invoker(handler_invoker) {}
@@ -105,10 +103,9 @@ void ServiceFrameworkBase::InstallAsService(SM::ServiceManager& service_manager)
     port_installed = true;
 }
 
-void ServiceFrameworkBase::InstallAsNamedPort() {
+void ServiceFrameworkBase::InstallAsNamedPort(Kernel::KernelCore& kernel) {
     ASSERT(!port_installed);
 
-    auto& kernel = Core::System::GetInstance().Kernel();
     auto [server_port, client_port] =
         Kernel::ServerPort::CreatePortPair(kernel, max_sessions, service_name);
     server_port->SetHleHandler(shared_from_this());
@@ -116,10 +113,9 @@ void ServiceFrameworkBase::InstallAsNamedPort() {
     port_installed = true;
 }
 
-std::shared_ptr<Kernel::ClientPort> ServiceFrameworkBase::CreatePort() {
+std::shared_ptr<Kernel::ClientPort> ServiceFrameworkBase::CreatePort(Kernel::KernelCore& kernel) {
     ASSERT(!port_installed);
 
-    auto& kernel = Core::System::GetInstance().Kernel();
     auto [server_port, client_port] =
         Kernel::ServerPort::CreatePortPair(kernel, max_sessions, service_name);
     auto port = MakeResult(std::move(server_port)).Unwrap();
@@ -190,9 +186,6 @@ ResultCode ServiceFrameworkBase::HandleSyncRequest(Kernel::HLERequestContext& co
 
     return RESULT_SUCCESS;
 }
-
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Module interface
 
 /// Initialize ServiceManager
 void Init(std::shared_ptr<SM::ServiceManager>& sm, Core::System& system) {

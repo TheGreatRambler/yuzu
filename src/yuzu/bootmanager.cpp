@@ -30,6 +30,7 @@
 #include "common/scope_exit.h"
 #include "core/core.h"
 #include "core/frontend/framebuffer_layout.h"
+#include "core/hle/kernel/process.h"
 #include "core/settings.h"
 #include "input_common/keyboard.h"
 #include "input_common/main.h"
@@ -63,7 +64,8 @@ void EmuThread::run() {
     emit LoadProgress(VideoCore::LoadCallbackStage::Prepare, 0, 0);
 
     system.Renderer().Rasterizer().LoadDiskResources(
-        stop_run, [this](VideoCore::LoadCallbackStage stage, std::size_t value, std::size_t total) {
+        system.CurrentProcess()->GetTitleID(), stop_run,
+        [this](VideoCore::LoadCallbackStage stage, std::size_t value, std::size_t total) {
             emit LoadProgress(stage, value, total);
         });
 
@@ -216,15 +218,6 @@ public:
 
     virtual ~RenderWidget() = default;
 
-    /// Called on the UI thread when this Widget is ready to draw
-    /// Dervied classes can override this to draw the latest frame.
-    virtual void Present() {}
-
-    void paintEvent(QPaintEvent* event) override {
-        Present();
-        update();
-    }
-
     QPaintEngine* paintEngine() const override {
         return nullptr;
     }
@@ -243,20 +236,8 @@ public:
         context = std::move(context_);
     }
 
-    void Present() override {
-        if (!isVisible()) {
-            return;
-        }
-
-        context->MakeCurrent();
-        if (Core::System::GetInstance().Renderer().TryPresent(100)) {
-            context->SwapBuffers();
-            glFinish();
-        }
-    }
-
 private:
-    std::unique_ptr<Core::Frontend::GraphicsContext> context{};
+    std::unique_ptr<Core::Frontend::GraphicsContext> context;
 };
 
 #ifdef HAS_VULKAN

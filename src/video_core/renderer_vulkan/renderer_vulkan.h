@@ -14,7 +14,15 @@
 #include "video_core/renderer_vulkan/wrapper.h"
 
 namespace Core {
-class System;
+class TelemetrySession;
+}
+
+namespace Core::Memory {
+class Memory;
+}
+
+namespace Tegra {
+class GPU;
 }
 
 namespace Vulkan {
@@ -22,9 +30,7 @@ namespace Vulkan {
 class StateTracker;
 class VKBlitScreen;
 class VKDevice;
-class VKFence;
 class VKMemoryManager;
-class VKResourceManager;
 class VKSwapchain;
 class VKScheduler;
 class VKImage;
@@ -38,7 +44,8 @@ struct VKScreenInfo {
 
 class RendererVulkan final : public VideoCore::RendererBase {
 public:
-    explicit RendererVulkan(Core::System& system, Core::Frontend::EmuWindow& emu_window,
+    explicit RendererVulkan(Core::TelemetrySession& telemtry_session,
+                            Core::Frontend::EmuWindow& emu_window, Core::Memory::Memory& cpu_memory,
                             Tegra::GPU& gpu,
                             std::unique_ptr<Core::Frontend::GraphicsContext> context);
     ~RendererVulkan() override;
@@ -46,7 +53,6 @@ public:
     bool Init() override;
     void ShutDown() override;
     void SwapBuffers(const Tegra::FramebufferConfig* framebuffer) override;
-    bool TryPresent(int timeout_ms) override;
 
     static std::vector<std::string> EnumerateDevices();
 
@@ -59,7 +65,8 @@ private:
 
     void Report() const;
 
-    Core::System& system;
+    Core::TelemetrySession& telemetry_session;
+    Core::Memory::Memory& cpu_memory;
     Tegra::GPU& gpu;
 
     Common::DynamicLibrary library;
@@ -72,11 +79,10 @@ private:
 
     vk::DebugCallback debug_callback;
     std::unique_ptr<VKDevice> device;
-    std::unique_ptr<VKSwapchain> swapchain;
     std::unique_ptr<VKMemoryManager> memory_manager;
-    std::unique_ptr<VKResourceManager> resource_manager;
     std::unique_ptr<StateTracker> state_tracker;
     std::unique_ptr<VKScheduler> scheduler;
+    std::unique_ptr<VKSwapchain> swapchain;
     std::unique_ptr<VKBlitScreen> blit_screen;
 };
 
