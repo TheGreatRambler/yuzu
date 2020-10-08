@@ -55,6 +55,7 @@ enum class Class : ClassType {
     Debug_GPU,         ///< GPU debugging tools
     Debug_Breakpoint,  ///< Logging breakpoints and watchpoints
     Debug_GDBStub,     ///< GDB Stub
+    Plugin,            ///< Plugin Manager
     Kernel,            ///< The HLE implementation of the CTR kernel
     Kernel_SVC,        ///< Kernel system calls
     Service,           ///< HLE implementation of system services. Each major service

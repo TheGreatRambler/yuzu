@@ -7,6 +7,36 @@
 
 namespace PluginDefinitions {
 
+enum class LogLevel : uint8_t {
+    Trace,
+    Debug,
+    Info,
+    Warning,
+    Error,
+    Critical,
+};
+
+enum class EnableInputType : uint8_t {
+    // Yuzu provides the input for every input type
+    EnableAll,
+    // Yuzu provides the input for only this device
+    // The rest can be set by the plugin
+    EnableController1,
+    EnableController2,
+    EnableController3,
+    EnableController4,
+    EnableController5,
+    EnableController6,
+    EnableController7,
+    EnableController8,
+    EnableControllerHandheld,
+    EnableTouchpad,
+    EnableMouseKeyboard,
+    // Yuzu provides none of the input
+    // It is all provided by the plugin
+    EnableNone,
+};
+
 enum class YuzuJoystickType : uint8_t {
     LeftX = 0,
     LeftY = 1,
@@ -331,18 +361,17 @@ typedef void(emu_print)(void* ctx, uint8_t mode);
 typedef uint8_t*(emu_getscreenframebuffer)(void* ctx, uint64_t* size);
 typedef uint8_t*(emu_getscreenjpeg)(void* ctx, uint64_t* size);
 
-// Get the name of the currently running game
 typedef char*(emu_romname)(void* ctx);
-// Get program ID
 typedef uint64_t(emu_getprogramid)(void* ctx);
-// Get process ID
 typedef uint64_t(emu_getprocessid)(void* ctx);
-// Get heap start
 typedef uint64_t(emu_getheapstart)(void* ctx);
-// Get main start
+typedef uint64_t(emu_getheapsize)(void* ctx);
 typedef uint64_t(emu_getmainstart)(void* ctx);
-// Log on Yuzu
-typedef void(emu_log)(void* ctx, const char* logmessage);
+typedef uint64_t(emu_getmainsize)(void* ctx);
+typedef uint64_t(emu_getstackstart)(void* ctx);
+typedef uint64_t(emu_getstacksize)(void* ctx);
+
+typedef void(emu_log)(void* ctx, const char* logmessage, LogLevel level);
 
 // ROM Library (handled differently since the games are bigger)
 
@@ -426,9 +455,9 @@ typedef void(input_setnumtouches)(void* ctx, uint8_t num);
 typedef int32_t(joypad_readtouch)(void* ctx, TouchTypes type);
 typedef void(joypad_settouch)(void* ctx, TouchTypes type, int32_t val);
 
-// Disable input entering from outside the script, this allows the script to set input without
-// interruption, this includes all joypads, keyboard, mouse and touchscreen
-typedef void(input_enableoutsideinput)(void* ctx, uint8_t enable);
+// Enable certain kinds of input from Yuzu, all input types not explicitely enabled
+// Are set manually by the plugin
+typedef void(input_enableoutsideinput)(void* ctx, EnableInputType typeToEnable);
 
 // Savestate Library implemented in dll
 

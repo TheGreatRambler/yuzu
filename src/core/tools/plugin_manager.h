@@ -43,13 +43,13 @@ namespace Kernel {
 class Process;
 } // namespace Kernel
 
+namespace Kernel::Memory {
+class PageTable;
+} // namespace Kernel::Memory
+
 namespace Loader {
 enum class ResultStatus : u16;
 } // namespace Loader
-
-namespace QSettings {
-class Config;
-} // namespace QSettings
 
 struct Plugin {
     bool ready{false};
