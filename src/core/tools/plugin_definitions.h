@@ -373,22 +373,16 @@ typedef uint64_t(emu_getstacksize)(void* ctx);
 
 typedef void(emu_log)(void* ctx, const char* logmessage, LogLevel level);
 
-// ROM Library (handled differently since the games are bigger)
-
-typedef uint8_t(rom_readbyte)(void* ctx, uint64_t address);
-typedef void(rom_readbytes)(void* ctx, uint8_t* dest, uint64_t address, uint64_t size);
-typedef void(rom_writebyte)(void* ctx, uint64_t address, uint8_t byte);
-typedef void(rom_writebytes)(void* ctx, uint64_t address, uint8_t* bytes, uint64_t size);
+// ROM Library cannot be implemented, use IPS or IPSwitch
 
 // Memory Library
 
-typedef uint8_t(memory_readbyteunsigned)(void* ctx, uint64_t address);
-typedef uint8_t*(memory_readbyterange)(void* ctx, uint64_t address, uint64_t length);
-typedef int8_t(memory_readbytesigned)(void* ctx, uint64_t address);
+typedef uint8_t(memory_readbyterange)(void* ctx, uint64_t address, uint8_t* bytes, uint64_t length);
+typedef uint8_t(memory_writebyterange)(void* ctx, uint64_t address, uint8_t* bytes,
+                                       uint64_t length);
 // memory.readword(int addressLow, [int addressHigh]) ignored
 // memory.readwordunsigned(int addressLow, [int addressHigh]) ignored
 // memory.readwordsigned(int addressLow, [int addressHigh]) ignored
-typedef void(memory_writebyte)(void* ctx, uint64_t address, uint8_t byte);
 // int memory.getregister(cpuregistername) ignored, believe the name is different
 // memory.setregister(string cpuregistername, int value) ignored, same as above
 // memory.register(int address, [int size,] function func) ignored
@@ -399,11 +393,11 @@ typedef void(memory_writebyte)(void* ctx, uint64_t address, uint8_t byte);
 
 // Debugger Library
 
-typedef void(debugger_hitbreakpoint)(void* ctx);
-typedef uint64_t(debugger_getcyclescount)(void* ctx);
-typedef uint64_t(debugger_getinstructionscount)(void* ctx);
-typedef void(debugger_resetcyclescount)(void* ctx);
-typedef void(debugger_resetinstructionscount)(void* ctx);
+// typedef void(debugger_hitbreakpoint)(void* ctx);
+typedef uint64_t(debugger_getclockticks)(void* ctx);
+typedef uint64_t(debugger_getcputicks)(void* ctx);
+// typedef void(debugger_resetcyclescount)(void* ctx);
+// typedef void(debugger_resetinstructionscount)(void* ctx);
 
 // Joypad Library (Modified, based on libnx standards)
 
@@ -489,13 +483,10 @@ typedef uint8_t*(gui_savescreenshotmemory)(void* ctx, uint64_t* size);
 
 // Sound Library ignored
 
-// TAS Editor Library implemented in DLL
-
-// Bitwise Operations implemented in DLL
-
 // Settings
 
 // ALL SETTINGS
+// from src\core\settings.h
 /*
     // Audio
     std::string audio_device_id;

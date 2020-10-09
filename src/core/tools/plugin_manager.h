@@ -7,8 +7,7 @@
 #define ADD_FUNCTION_TO_PLUGIN(type, address)                                                      \
     func = GetDllFunction<PluginDefinitions::meta_add_function>(*plugin, "yuzupluginset_" #type);  \
     if (func)                                                                                      \
-        func((void*)((PluginDefinitions::type*)address));                                          \
-    func = nullptr;
+        func((void*)((PluginDefinitions::type*)address));
 
 #include <atomic>
 #include <functional>

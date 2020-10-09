@@ -351,25 +351,58 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
         const char* logMessage, PluginDefinitions::LogLevel level) -> void {
         Plugin* self = (Plugin*)pluginInstance;
         // TODO send to correct channels
-        /*
         switch (level) {
         case PluginDefinitions::LogLevel::Info:
-            LOG_INFO(Log::Class::Plugin, logMessage);
+            LOG_INFO(Plugin, logMessage);
             break;
         case PluginDefinitions::LogLevel::Critical:
-            LOG_CRITICAL(Log::Class::Plugin, logMessage);
+            LOG_CRITICAL(Plugin, logMessage);
             break;
         case PluginDefinitions::LogLevel::Debug:
-            LOG_DEBUG(Log::Class::Plugin, logMessage);
+            LOG_DEBUG(Plugin, logMessage);
             break;
         case PluginDefinitions::LogLevel::Warning:
-            LOG_WARNING(Log::Class::Plugin, logMessage);
+            LOG_WARNING(Plugin, logMessage);
             break;
         case PluginDefinitions::LogLevel::Error:
-            LOG_ERROR(Log::Class::Plugin, logMessage);
+            LOG_ERROR(Plugin, logMessage);
             break;
         }
-        */
+    })
+    // clang-format on
+    ADD_FUNCTION_TO_PLUGIN(
+        memory_readbyterange,
+        [](void* pluginInstance, uint64_t address, uint8_t* bytes, uint64_t length) -> uint8_t {
+            Plugin* self = (Plugin*)pluginInstance;
+            Core::Memory::Memory& memoryInstance = self->system->Memory();
+            if (memoryInstance.IsValidVirtualAddress(address) &&
+                memoryInstance.IsValidVirtualAddress(address + length - 1)) {
+                memoryInstance.ReadBlock(address, bytes, length);
+                return true;
+            } else {
+                return false;
+            }
+        })
+    ADD_FUNCTION_TO_PLUGIN(
+        memory_writebyterange,
+        [](void* pluginInstance, uint64_t address, uint8_t* bytes, uint64_t length) -> uint8_t {
+            Plugin* self = (Plugin*)pluginInstance;
+            Core::Memory::Memory& memoryInstance = self->system->Memory();
+            if (memoryInstance.IsValidVirtualAddress(address) &&
+                memoryInstance.IsValidVirtualAddress(address + length - 1)) {
+                memoryInstance.WriteBlock(address, bytes, length);
+                return true;
+            } else {
+                return false;
+            }
+        })
+    ADD_FUNCTION_TO_PLUGIN(debugger_getclockticks, [](void* pluginInstance) -> uint64_t {
+        Plugin* self = (Plugin*)pluginInstance;
+        return self->system->CoreTiming().GetClockTicks();
+    })
+    ADD_FUNCTION_TO_PLUGIN(debugger_getcputicks, [](void* pluginInstance) -> uint64_t {
+        Plugin* self = (Plugin*)pluginInstance;
+        return self->system->CoreTiming().GetCPUTicks();
     })
     // clang-format on
 }
