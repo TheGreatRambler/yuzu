@@ -29,7 +29,9 @@ public:
     // Called when input devices should be loaded
     void OnLoadInputDevices() override;
 
-private:
+    void RequestTouchscreenStateUpdate(const Core::Timing::CoreTiming& core_timing);
+
+    // Exposed for plugin manager
     struct Attributes {
         union {
             u32 raw{};
@@ -59,6 +61,16 @@ private:
     };
     static_assert(sizeof(TouchScreenEntry) == 0x298, "TouchScreenEntry is an invalid size");
 
+    // Used to obtain a raw handle to a controller
+    // Specifically for the plugin manager
+    TouchScreenEntry& GetRawHandle();
+
+    // Enable input from user (as opposed to from a plugin) for this controller
+    // Specifically for the plugin manager
+    void EnableOutsideInput(bool enable);
+    bool IsEnabledOutsideInput();
+
+private:
     struct TouchScreenSharedMemory {
         CommonHeader header;
         std::array<TouchScreenEntry, 17> shared_memory_entries{};
@@ -70,5 +82,6 @@ private:
     std::unique_ptr<Input::TouchDevice> touch_device;
     std::unique_ptr<Input::TouchDevice> touch_btn_device;
     s64_le last_touch{};
+    bool outside_input_enabled{true};
 };
 } // namespace Service::HID

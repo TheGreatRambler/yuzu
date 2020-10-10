@@ -40,27 +40,18 @@ void Controller_Touchscreen::OnUpdate(const Core::Timing::CoreTiming& core_timin
     cur_entry.sampling_number = last_entry.sampling_number + 1;
     cur_entry.sampling_number2 = cur_entry.sampling_number;
 
-    bool pressed = false;
-    float x, y;
-    std::tie(x, y, pressed) = touch_device->GetStatus();
     auto& touch_entry = cur_entry.states[0];
     touch_entry.attribute.raw = 0;
-    if (!pressed && touch_btn_device) {
-        std::tie(x, y, pressed) = touch_btn_device->GetStatus();
-    }
-    if (pressed && Settings::values.touchscreen.enabled) {
-        touch_entry.x = static_cast<u16>(x * Layout::ScreenUndocked::Width);
-        touch_entry.y = static_cast<u16>(y * Layout::ScreenUndocked::Height);
-        touch_entry.diameter_x = Settings::values.touchscreen.diameter_x;
-        touch_entry.diameter_y = Settings::values.touchscreen.diameter_y;
-        touch_entry.rotation_angle = Settings::values.touchscreen.rotation_angle;
-        const u64 tick = core_timing.GetCPUTicks();
-        touch_entry.delta_time = tick - last_touch;
-        last_touch = tick;
-        touch_entry.finger = Settings::values.touchscreen.finger;
-        cur_entry.entry_count = 1;
-    } else {
-        cur_entry.entry_count = 0;
+    touch_entry.diameter_x = Settings::values.touchscreen.diameter_x;
+    touch_entry.diameter_y = Settings::values.touchscreen.diameter_y;
+    touch_entry.rotation_angle = Settings::values.touchscreen.rotation_angle;
+    touch_entry.finger = Settings::values.touchscreen.finger;
+    const u64 tick = core_timing.GetCPUTicks();
+    touch_entry.delta_time = tick - last_touch;
+    last_touch = tick;
+
+    if (outside_input_enabled) {
+        RequestTouchscreenStateUpdate(core_timing);
     }
 
     std::memcpy(data + SHARED_MEMORY_OFFSET, &shared_memory, sizeof(TouchScreenSharedMemory));
@@ -73,5 +64,43 @@ void Controller_Touchscreen::OnLoadInputDevices() {
     } else {
         touch_btn_device.reset();
     }
+}
+
+void Controller_Touchscreen::RequestTouchscreenStateUpdate(
+    const Core::Timing::CoreTiming& core_timing) {
+    const auto& last_entry =
+        shared_memory.shared_memory_entries[shared_memory.header.last_entry_index];
+    shared_memory.header.last_entry_index = (shared_memory.header.last_entry_index + 1) % 17;
+    auto& cur_entry = shared_memory.shared_memory_entries[shared_memory.header.last_entry_index];
+
+    bool pressed = false;
+    float x, y;
+    std::tie(x, y, pressed) = touch_device->GetStatus();
+    auto& touch_entry = cur_entry.states[0];
+    touch_entry.attribute.raw = 0;
+    if (!pressed && touch_btn_device) {
+        std::tie(x, y, pressed) = touch_btn_device->GetStatus();
+    }
+    if (pressed && Settings::values.touchscreen.enabled) {
+        touch_entry.x = static_cast<u16>(x * Layout::ScreenUndocked::Width);
+        touch_entry.y = static_cast<u16>(y * Layout::ScreenUndocked::Height);
+        const u64 tick = core_timing.GetCPUTicks();
+        touch_entry.delta_time = tick - last_touch;
+        last_touch = tick;
+        cur_entry.entry_count = 1;
+    } else {
+        cur_entry.entry_count = 0;
+    }
+}
+
+Controller_Touchscreen::TouchScreenEntry& Controller_Touchscreen::GetRawHandle() {
+    return shared_memory.shared_memory_entries[shared_memory.header.last_entry_index];
+}
+
+void Controller_Touchscreen::EnableOutsideInput(bool enable) {
+    outside_input_enabled = enable;
+}
+bool Controller_Touchscreen::IsEnabledOutsideInput() {
+    return outside_input_enabled;
 }
 } // namespace Service::HID

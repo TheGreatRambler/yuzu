@@ -11,6 +11,12 @@
 #include "core/hardware_properties.h"
 #include "core/hle/kernel/memory/page_table.h"
 #include "core/hle/kernel/process.h"
+#include "core/hle/service/hid/controllers/keyboard.h"
+#include "core/hle/service/hid/controllers/mouse.h"
+#include "core/hle/service/hid/controllers/npad.h"
+#include "core/hle/service/hid/controllers/touchscreen.h"
+#include "core/hle/service/hid/hid.h"
+#include "core/hle/service/sm/sm.h"
 #include "core/loader/loader.h"
 #include "core/memory.h"
 #include "core/settings.h"
@@ -243,8 +249,8 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
         free(ptr);
     })
 
-    ADD_FUNCTION_TO_PLUGIN(emu_frameadvance, [](void* pluginInstance) -> void {
-        Plugin* self = (Plugin*)pluginInstance;
+    ADD_FUNCTION_TO_PLUGIN(emu_frameadvance, [](void* ctx) -> void {
+        Plugin* self = (Plugin*)ctx;
 
         // Notify main thread a vsync event is now being waited for
         self->encounteredVsync = true;
@@ -257,23 +263,23 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
         // Once this is done, execution will resume as normal
     });
 
-    ADD_FUNCTION_TO_PLUGIN(emu_pause, [](void* pluginInstance) -> void {
-        Plugin* self = (Plugin*)pluginInstance;
+    ADD_FUNCTION_TO_PLUGIN(emu_pause, [](void* ctx) -> void {
+        Plugin* self = (Plugin*)ctx;
         self->system->Pause();
     })
 
-    ADD_FUNCTION_TO_PLUGIN(emu_unpause, [](void* pluginInstance) -> void {
-        Plugin* self = (Plugin*)pluginInstance;
+    ADD_FUNCTION_TO_PLUGIN(emu_unpause, [](void* ctx) -> void {
+        Plugin* self = (Plugin*)ctx;
         self->system->Run();
     })
     // ADD_FUNCTION_TO_PLUGIN(emu_message)
     // ADD_FUNCTION_TO_PLUGIN(emu_framecount)
-    ADD_FUNCTION_TO_PLUGIN(emu_emulating, [](void* pluginInstance) -> uint8_t {
-        Plugin* self = (Plugin*)pluginInstance;
+    ADD_FUNCTION_TO_PLUGIN(emu_emulating, [](void* ctx) -> uint8_t {
+        Plugin* self = (Plugin*)ctx;
         return self->system->CurrentProcess()->GetStatus() == Kernel::ProcessStatus::Running;
     })
-    ADD_FUNCTION_TO_PLUGIN(emu_romname, [](void* pluginInstance) -> char* {
-        Plugin* self = (Plugin*)pluginInstance;
+    ADD_FUNCTION_TO_PLUGIN(emu_romname, [](void* ctx) -> char* {
+        Plugin* self = (Plugin*)ctx;
         std::string name;
         if (self->system->GetGameName(name) == Loader::ResultStatus::Success) {
             return GetAllocatedString(name);
@@ -281,8 +287,8 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             return NULL;
         }
     })
-    ADD_FUNCTION_TO_PLUGIN(emu_getprogramid, [](void* pluginInstance) -> uint64_t {
-        Plugin* self = (Plugin*)pluginInstance;
+    ADD_FUNCTION_TO_PLUGIN(emu_getprogramid, [](void* ctx) -> uint64_t {
+        Plugin* self = (Plugin*)ctx;
         uint64_t id;
         if (self->system->GetAppLoader().ReadProgramId(id) != Loader::ResultStatus::Success) {
             return 0;
@@ -290,56 +296,56 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             return id;
         }
     })
-    ADD_FUNCTION_TO_PLUGIN(emu_getprocessid, [](void* pluginInstance) -> uint64_t {
-        Plugin* self = (Plugin*)pluginInstance;
+    ADD_FUNCTION_TO_PLUGIN(emu_getprocessid, [](void* ctx) -> uint64_t {
+        Plugin* self = (Plugin*)ctx;
         if (self->system->CurrentProcess() == nullptr) {
             return 0;
         } else {
             return self->system->CurrentProcess()->GetProcessID();
         }
     })
-    ADD_FUNCTION_TO_PLUGIN(emu_getheapstart, [](void* pluginInstance) -> uint64_t {
-        Plugin* self = (Plugin*)pluginInstance;
+    ADD_FUNCTION_TO_PLUGIN(emu_getheapstart, [](void* ctx) -> uint64_t {
+        Plugin* self = (Plugin*)ctx;
         if (self->system->CurrentProcess() == nullptr) {
             return 0;
         } else {
             return self->system->CurrentProcess()->PageTable().GetHeapRegionStart();
         }
     })
-    ADD_FUNCTION_TO_PLUGIN(emu_getheapsize, [](void* pluginInstance) -> uint64_t {
-        Plugin* self = (Plugin*)pluginInstance;
+    ADD_FUNCTION_TO_PLUGIN(emu_getheapsize, [](void* ctx) -> uint64_t {
+        Plugin* self = (Plugin*)ctx;
         if (self->system->CurrentProcess() == nullptr) {
             return 0;
         } else {
             return self->system->CurrentProcess()->PageTable().GetHeapRegionSize();
         }
     })
-    ADD_FUNCTION_TO_PLUGIN(emu_getmainstart, [](void* pluginInstance) -> uint64_t {
-        Plugin* self = (Plugin*)pluginInstance;
+    ADD_FUNCTION_TO_PLUGIN(emu_getmainstart, [](void* ctx) -> uint64_t {
+        Plugin* self = (Plugin*)ctx;
         if (self->system->CurrentProcess() == nullptr) {
             return 0;
         } else {
             return self->system->CurrentProcess()->PageTable().GetAddressSpaceStart();
         }
     })
-    ADD_FUNCTION_TO_PLUGIN(emu_getmainsize, [](void* pluginInstance) -> uint64_t {
-        Plugin* self = (Plugin*)pluginInstance;
+    ADD_FUNCTION_TO_PLUGIN(emu_getmainsize, [](void* ctx) -> uint64_t {
+        Plugin* self = (Plugin*)ctx;
         if (self->system->CurrentProcess() == nullptr) {
             return 0;
         } else {
             return self->system->CurrentProcess()->PageTable().GetAddressSpaceSize();
         }
     })
-    ADD_FUNCTION_TO_PLUGIN(emu_getstackstart, [](void* pluginInstance) -> uint64_t {
-        Plugin* self = (Plugin*)pluginInstance;
+    ADD_FUNCTION_TO_PLUGIN(emu_getstackstart, [](void* ctx) -> uint64_t {
+        Plugin* self = (Plugin*)ctx;
         if (self->system->CurrentProcess() == nullptr) {
             return 0;
         } else {
             return self->system->CurrentProcess()->PageTable().GetStackRegionStart();
         }
     })
-    ADD_FUNCTION_TO_PLUGIN(emu_getstacksize, [](void* pluginInstance) -> uint64_t {
-        Plugin* self = (Plugin*)pluginInstance;
+    ADD_FUNCTION_TO_PLUGIN(emu_getstacksize, [](void* ctx) -> uint64_t {
+        Plugin* self = (Plugin*)ctx;
         if (self->system->CurrentProcess() == nullptr) {
             return 0;
         } else {
@@ -347,9 +353,9 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
         }
     })
     // clang-format off
-    ADD_FUNCTION_TO_PLUGIN(emu_log, [](void* pluginInstance,
+    ADD_FUNCTION_TO_PLUGIN(emu_log, [](void* ctx,
         const char* logMessage, PluginDefinitions::LogLevel level) -> void {
-        Plugin* self = (Plugin*)pluginInstance;
+        Plugin* self = (Plugin*)ctx;
         // TODO send to correct channels
         switch (level) {
         case PluginDefinitions::LogLevel::Info:
@@ -372,8 +378,8 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
     // clang-format on
     ADD_FUNCTION_TO_PLUGIN(
         memory_readbyterange,
-        [](void* pluginInstance, uint64_t address, uint8_t* bytes, uint64_t length) -> uint8_t {
-            Plugin* self = (Plugin*)pluginInstance;
+        [](void* ctx, uint64_t address, uint8_t* bytes, uint64_t length) -> uint8_t {
+            Plugin* self = (Plugin*)ctx;
             Core::Memory::Memory& memoryInstance = self->system->Memory();
             if (memoryInstance.IsValidVirtualAddress(address) &&
                 memoryInstance.IsValidVirtualAddress(address + length - 1)) {
@@ -385,8 +391,8 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
         })
     ADD_FUNCTION_TO_PLUGIN(
         memory_writebyterange,
-        [](void* pluginInstance, uint64_t address, uint8_t* bytes, uint64_t length) -> uint8_t {
-            Plugin* self = (Plugin*)pluginInstance;
+        [](void* ctx, uint64_t address, uint8_t* bytes, uint64_t length) -> uint8_t {
+            Plugin* self = (Plugin*)ctx;
             Core::Memory::Memory& memoryInstance = self->system->Memory();
             if (memoryInstance.IsValidVirtualAddress(address) &&
                 memoryInstance.IsValidVirtualAddress(address + length - 1)) {
@@ -396,15 +402,211 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 return false;
             }
         })
-    ADD_FUNCTION_TO_PLUGIN(debugger_getclockticks, [](void* pluginInstance) -> uint64_t {
-        Plugin* self = (Plugin*)pluginInstance;
+    ADD_FUNCTION_TO_PLUGIN(debugger_getclockticks, [](void* ctx) -> uint64_t {
+        Plugin* self = (Plugin*)ctx;
         return self->system->CoreTiming().GetClockTicks();
     })
-    ADD_FUNCTION_TO_PLUGIN(debugger_getcputicks, [](void* pluginInstance) -> uint64_t {
-        Plugin* self = (Plugin*)pluginInstance;
+    ADD_FUNCTION_TO_PLUGIN(debugger_getcputicks, [](void* ctx) -> uint64_t {
+        Plugin* self = (Plugin*)ctx;
         return self->system->CoreTiming().GetCPUTicks();
     })
+    // clang-format off
+    ADD_FUNCTION_TO_PLUGIN(joypad_read,
+        [](void* ctx, PluginDefinitions::ControllerNumber player) -> uint64_t {
+            Plugin* self = (Plugin*)ctx;
+            Service::SM::ServiceManager& sm = self->system->ServiceManager();
+            Service::HID::Controller_NPad& npad =
+                sm.GetService<Service::HID::Hid>("hid")
+                    ->GetAppletResource()
+                    ->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
+            return npad.GetRawHandle((uint32_t) player).pad_states.raw;
+    })
+    ADD_FUNCTION_TO_PLUGIN(joypad_set,
+        [](void* ctx, PluginDefinitions::ControllerNumber player, uint64_t input) -> void {
+            Plugin* self = (Plugin*)ctx;
+            Service::SM::ServiceManager& sm = self->system->ServiceManager();
+            Service::HID::Controller_NPad& npad =
+                sm.GetService<Service::HID::Hid>("hid")
+                    ->GetAppletResource()
+                    ->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
+            npad.GetRawHandle((uint32_t) player).pad_states.raw = input;
+    })
+    ADD_FUNCTION_TO_PLUGIN(joypad_readjoystick,
+        [](void* ctx, PluginDefinitions::ControllerNumber player,
+        PluginDefinitions::YuzuJoystickType type) -> int16_t {
+            Plugin* self = (Plugin*)ctx;
+            Service::SM::ServiceManager& sm = self->system->ServiceManager();
+            Service::HID::Controller_NPad& npad =
+                sm.GetService<Service::HID::Hid>("hid")
+                    ->GetAppletResource()
+                    ->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
+            npad.RequestPadStateUpdate((uint32_t) player);
+            auto& handle = npad.GetRawHandle((uint32_t) player);
+            switch(type) {
+                case PluginDefinitions::YuzuJoystickType::LeftX:
+                    return handle.l_stick.x;
+                case PluginDefinitions::YuzuJoystickType::LeftY:
+                    return handle.l_stick.y;
+                case PluginDefinitions::YuzuJoystickType::RightX:
+                    return handle.r_stick.x;
+                case PluginDefinitions::YuzuJoystickType::RightY:
+                    return handle.r_stick.y;
+            }
+    })
+    ADD_FUNCTION_TO_PLUGIN(joypad_setjoystick,
+        [](void* ctx, PluginDefinitions::ControllerNumber player,
+        PluginDefinitions::YuzuJoystickType type, int16_t input) -> void {
+            Plugin* self = (Plugin*)ctx;
+            Service::SM::ServiceManager& sm = self->system->ServiceManager();
+            Service::HID::Controller_NPad& npad =
+                sm.GetService<Service::HID::Hid>("hid")
+                    ->GetAppletResource()
+                    ->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
+            auto& handle = npad.GetRawHandle((uint32_t) player);
+            switch(type) {
+                case PluginDefinitions::YuzuJoystickType::LeftX:
+                    handle.l_stick.x = input;
+                    break;
+                case PluginDefinitions::YuzuJoystickType::LeftY:
+                    handle.l_stick.y = input;
+                    break;
+                case PluginDefinitions::YuzuJoystickType::RightX:
+                    handle.r_stick.x = input;
+                    break;
+                case PluginDefinitions::YuzuJoystickType::RightY:
+                    handle.r_stick.y = input;
+                    break;
+            }
+    })
+    ADD_FUNCTION_TO_PLUGIN(joypad_readsixaxis,
+        [](void* ctx, PluginDefinitions::ControllerNumber player,
+        PluginDefinitions::SixAxisMotionTypes type) -> float {
+            Plugin* self = (Plugin*)ctx;
+            Service::SM::ServiceManager& sm = self->system->ServiceManager();
+            Service::HID::Controller_NPad& npad =
+                sm.GetService<Service::HID::Hid>("hid")
+                    ->GetAppletResource()
+                    ->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
+            npad.RequestMotionUpdate((uint32_t) player);
+            auto& handle = npad.GetRawMotionHandle((uint32_t) player);
+            switch(type) {
+                case PluginDefinitions::SixAxisMotionTypes::AccelerationX:
+                    return handle.accel.x;
+                case PluginDefinitions::SixAxisMotionTypes::AccelerationY:
+                    return handle.accel.y;
+                case PluginDefinitions::SixAxisMotionTypes::AccelerationZ:
+                    return handle.accel.z;
+                case PluginDefinitions::SixAxisMotionTypes::AngularVelocityX:
+                    return handle.gyro.x;
+                case PluginDefinitions::SixAxisMotionTypes::AngularVelocityY:
+                    return handle.gyro.y;
+                case PluginDefinitions::SixAxisMotionTypes::AngularVelocityZ:
+                    return handle.gyro.z;
+                case PluginDefinitions::SixAxisMotionTypes::AngleX:
+                    return handle.rotation.x;
+                case PluginDefinitions::SixAxisMotionTypes::AngleY:
+                    return handle.rotation.y;
+                case PluginDefinitions::SixAxisMotionTypes::AngleZ:
+                    return handle.rotation.z;
+                case PluginDefinitions::SixAxisMotionTypes::DirectionXX:
+                    return handle.orientation[0].x;
+                case PluginDefinitions::SixAxisMotionTypes::DirectionXY:
+                    return handle.orientation[0].y;
+                case PluginDefinitions::SixAxisMotionTypes::DirectionXZ:
+                    return handle.orientation[0].z;
+                case PluginDefinitions::SixAxisMotionTypes::DirectionYX:
+                    return handle.orientation[1].x;
+                case PluginDefinitions::SixAxisMotionTypes::DirectionYY:
+                    return handle.orientation[1].y;
+                case PluginDefinitions::SixAxisMotionTypes::DirectionYZ:
+                    return handle.orientation[1].z;
+                case PluginDefinitions::SixAxisMotionTypes::DirectionZX:
+                    return handle.orientation[2].x;
+                case PluginDefinitions::SixAxisMotionTypes::DirectionZY:
+                    return handle.orientation[2].y;
+                case PluginDefinitions::SixAxisMotionTypes::DirectionZZ:
+                    return handle.orientation[2].z;
+            }
+    })
+    ADD_FUNCTION_TO_PLUGIN(joypad_setsixaxis,
+        [](void* ctx, PluginDefinitions::ControllerNumber player,
+        PluginDefinitions::SixAxisMotionTypes type, float input) -> void {
+            Plugin* self = (Plugin*)ctx;
+            Service::SM::ServiceManager& sm = self->system->ServiceManager();
+            Service::HID::Controller_NPad& npad =
+                sm.GetService<Service::HID::Hid>("hid")
+                    ->GetAppletResource()
+                    ->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
+            auto& handle = npad.GetRawMotionHandle((uint32_t) player);
+            switch(type) {
+                case PluginDefinitions::SixAxisMotionTypes::AccelerationX:
+                    handle.accel.x = input;
+                    break;
+                case PluginDefinitions::SixAxisMotionTypes::AccelerationY:
+                    handle.accel.y = input;
+                    break;
+                case PluginDefinitions::SixAxisMotionTypes::AccelerationZ:
+                    handle.accel.z = input;
+                    break;
+                case PluginDefinitions::SixAxisMotionTypes::AngularVelocityX:
+                    handle.gyro.x = input;
+                    break;
+                case PluginDefinitions::SixAxisMotionTypes::AngularVelocityY:
+                    handle.gyro.y = input;
+                    break;
+                case PluginDefinitions::SixAxisMotionTypes::AngularVelocityZ:
+                    handle.gyro.z = input;
+                    break;
+                case PluginDefinitions::SixAxisMotionTypes::AngleX:
+                    handle.rotation.x = input;
+                    break;
+                case PluginDefinitions::SixAxisMotionTypes::AngleY:
+                    handle.rotation.y = input;
+                    break;
+                case PluginDefinitions::SixAxisMotionTypes::AngleZ:
+                    handle.rotation.z = input;
+                    break;
+                case PluginDefinitions::SixAxisMotionTypes::DirectionXX:
+                    handle.orientation[0].x = input;
+                    break;
+                case PluginDefinitions::SixAxisMotionTypes::DirectionXY:
+                    handle.orientation[0].y = input;
+                    break;
+                case PluginDefinitions::SixAxisMotionTypes::DirectionXZ:
+                    handle.orientation[0].z = input;
+                    break;
+                case PluginDefinitions::SixAxisMotionTypes::DirectionYX:
+                    handle.orientation[1].x = input;
+                    break;
+                case PluginDefinitions::SixAxisMotionTypes::DirectionYY:
+                    handle.orientation[1].y = input;
+                    break;
+                case PluginDefinitions::SixAxisMotionTypes::DirectionYZ:
+                    handle.orientation[1].z = input;
+                    break;
+                case PluginDefinitions::SixAxisMotionTypes::DirectionZX:
+                    handle.orientation[2].x = input;
+                    break;
+                case PluginDefinitions::SixAxisMotionTypes::DirectionZY:
+                    handle.orientation[2].y = input;
+                    break;
+                case PluginDefinitions::SixAxisMotionTypes::DirectionZZ:
+                    handle.orientation[2].z = input;
+                    break;
+            }
+    })
     // clang-format on
+    /*
+    // Add controllers
+    typedef void(joypad_addjoypad)(void* ctx, ControllerType type);
+    // Remove all controllers
+    typedef void(joypad_removealljoypads)(void* ctx);
+    // Set controller type at index
+    typedef void(joypad_setjoypadtype)(void* ctx, ControllerNumber player, ControllerType
+    type);
+    // Get number of controllers
+    typedef uint8_t(joypad_getnumjoypads)(void* ctx);
+    */
 }
 
 /*
@@ -423,8 +625,8 @@ u64 Freezer::Freeze(VAddr address, u32 width) {
     entries.push_back({address, width, current_value});
 
     LOG_DEBUG(Common_Memory,
-              "Freezing memory for address={:016X}, width={:02X}, current_value={:016X}", address,
-              width, current_value);
+              "Freezing memory for address={:016X}, width={:02X}, current_value={:016X}",
+address, width, current_value);
 
     return current_value;
 }
@@ -451,27 +653,26 @@ bool Freezer::IsFrozen(VAddr address) const {
 void Freezer::SetFrozenValue(VAddr address, u64 value) {
     std::lock_guard lock{entries_mutex};
 
-    const auto iter = std::find_if(entries.begin(), entries.end(), [&address](const Entry& entry) {
-        return entry.address == address;
+    const auto iter = std::find_if(entries.begin(), entries.end(), [&address](const Entry&
+entry) { return entry.address == address;
     });
 
     if (iter == entries.end()) {
         LOG_ERROR(Common_Memory,
-                  "Tried to set freeze value for address={:016X} that is not frozen!", address);
-        return;
+                  "Tried to set freeze value for address={:016X} that is not frozen!",
+address); return;
     }
 
     LOG_DEBUG(Common_Memory,
-              "Manually overridden freeze value for address={:016X}, width={:02X} to value={:016X}",
-              iter->address, iter->width, value);
-    iter->value = value;
+              "Manually overridden freeze value for address={:016X}, width={:02X} to
+value={:016X}", iter->address, iter->width, value); iter->value = value;
 }
 
 std::optional<Freezer::Entry> Freezer::GetEntry(VAddr address) const {
     std::lock_guard lock{entries_mutex};
 
-    const auto iter = std::find_if(entries.begin(), entries.end(), [&address](const Entry& entry) {
-        return entry.address == address;
+    const auto iter = std::find_if(entries.begin(), entries.end(), [&address](const Entry&
+entry) { return entry.address == address;
     });
 
     if (iter == entries.end()) {
@@ -489,8 +690,8 @@ std::vector<Freezer::Entry> Freezer::GetEntries() const {
 
 void Freezer::FrameCallback(u64 userdata, s64 ns_late) {
     if (!IsActive()) {
-        LOG_DEBUG(Common_Memory, "Memory freezer has been deactivated, ending callback events.");
-        return;
+        LOG_DEBUG(Common_Memory, "Memory freezer has been deactivated, ending callback
+events."); return;
     }
 
     std::lock_guard lock{entries_mutex};

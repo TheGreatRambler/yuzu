@@ -29,7 +29,8 @@ public:
     // Called when input devices should be loaded
     void OnLoadInputDevices() override;
 
-private:
+    void RequestMouseStateUpdate();
+
     struct MouseState {
         s64_le sampling_number;
         s64_le sampling_number2;
@@ -44,6 +45,16 @@ private:
     };
     static_assert(sizeof(MouseState) == 0x30, "MouseState is an invalid size");
 
+    // Used to obtain a raw handle to a controller
+    // Specifically for the plugin manager
+    MouseState& GetRawHandle();
+
+    // Enable input from user (as opposed to from a plugin) for this controller
+    // Specifically for the plugin manager
+    void EnableOutsideInput(bool enable);
+    bool IsEnabledOutsideInput();
+
+private:
     struct SharedMemory {
         CommonHeader header;
         std::array<MouseState, 17> mouse_states;
@@ -53,5 +64,6 @@ private:
     std::unique_ptr<Input::MouseDevice> mouse_device;
     std::array<std::unique_ptr<Input::ButtonDevice>, Settings::NativeMouseButton::NumMouseButtons>
         mouse_button_devices;
+    bool outside_input_enabled{true};
 };
 } // namespace Service::HID

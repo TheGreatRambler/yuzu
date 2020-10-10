@@ -39,6 +39,9 @@ public:
     // Called when input devices should be loaded
     void OnLoadInputDevices() override;
 
+    void RequestPadStateUpdate(u32 npad_id);
+    void RequestMotionUpdate(u32 npad_id);
+
     struct NPadType {
         union {
             u32_le raw{};
@@ -110,6 +113,73 @@ public:
         };
     };
 
+    // Exposed to be used by plugin manager
+
+    struct ControllerPadState {
+        union {
+            u64_le raw{};
+            // Button states
+            BitField<0, 1, u64> a;
+            BitField<1, 1, u64> b;
+            BitField<2, 1, u64> x;
+            BitField<3, 1, u64> y;
+            BitField<4, 1, u64> l_stick;
+            BitField<5, 1, u64> r_stick;
+            BitField<6, 1, u64> l;
+            BitField<7, 1, u64> r;
+            BitField<8, 1, u64> zl;
+            BitField<9, 1, u64> zr;
+            BitField<10, 1, u64> plus;
+            BitField<11, 1, u64> minus;
+
+            // D-Pad
+            BitField<12, 1, u64> d_left;
+            BitField<13, 1, u64> d_up;
+            BitField<14, 1, u64> d_right;
+            BitField<15, 1, u64> d_down;
+
+            // Left JoyStick
+            BitField<16, 1, u64> l_stick_left;
+            BitField<17, 1, u64> l_stick_up;
+            BitField<18, 1, u64> l_stick_right;
+            BitField<19, 1, u64> l_stick_down;
+
+            // Right JoyStick
+            BitField<20, 1, u64> r_stick_left;
+            BitField<21, 1, u64> r_stick_up;
+            BitField<22, 1, u64> r_stick_right;
+            BitField<23, 1, u64> r_stick_down;
+
+            // Not always active?
+            BitField<24, 1, u64> left_sl;
+            BitField<25, 1, u64> left_sr;
+
+            BitField<26, 1, u64> right_sl;
+            BitField<27, 1, u64> right_sr;
+        };
+    };
+    static_assert(sizeof(ControllerPadState) == 8, "ControllerPadState is an invalid size");
+
+    struct AnalogPosition {
+        s32_le x;
+        s32_le y;
+    };
+    static_assert(sizeof(AnalogPosition) == 8, "AnalogPosition is an invalid size");
+
+    struct ControllerPad {
+        ControllerPadState pad_states;
+        AnalogPosition l_stick;
+        AnalogPosition r_stick;
+    };
+    static_assert(sizeof(ControllerPad) == 0x18, "ControllerPad is an invalid size");
+
+    struct MotionDevice {
+        Common::Vec3f accel;
+        Common::Vec3f gyro;
+        Common::Vec3f rotation;
+        std::array<Common::Vec3f, 3> orientation;
+    };
+
     void SetSupportedStyleSet(NPadType style_set);
     NPadType GetSupportedStyleSet() const;
 
@@ -164,6 +234,19 @@ public:
     // Specifically for cheat engine and other features.
     u32 GetAndResetPressState();
 
+    // Used to obtain a raw handle to a controller
+    // Specifically for the plugin manager
+    ControllerPad& GetRawHandle(u32 npad_id);
+
+    // Used to obtain a raw handle to motion data
+    // Specifically for the plugin manager
+    MotionDevice& GetRawMotionHandle(u32 npad_id);
+
+    // Enable input from user (as opposed to from a plugin) for this controller
+    // Specifically for the plugin manager
+    void EnableOutsideInput(u32 npad_id, bool enable);
+    bool IsEnabledOutsideInput(u32 npad_id);
+
     static Controller_NPad::NPadControllerType MapSettingsTypeToNPad(Settings::ControllerType type);
     static Settings::ControllerType MapNPadToSettingsType(Controller_NPad::NPadControllerType type);
     static std::size_t NPadIdToIndex(u32 npad_id);
@@ -184,57 +267,6 @@ private:
     };
     static_assert(sizeof(ControllerColor) == 8, "ControllerColor is an invalid size");
 
-    struct ControllerPadState {
-        union {
-            u64_le raw{};
-            // Button states
-            BitField<0, 1, u64> a;
-            BitField<1, 1, u64> b;
-            BitField<2, 1, u64> x;
-            BitField<3, 1, u64> y;
-            BitField<4, 1, u64> l_stick;
-            BitField<5, 1, u64> r_stick;
-            BitField<6, 1, u64> l;
-            BitField<7, 1, u64> r;
-            BitField<8, 1, u64> zl;
-            BitField<9, 1, u64> zr;
-            BitField<10, 1, u64> plus;
-            BitField<11, 1, u64> minus;
-
-            // D-Pad
-            BitField<12, 1, u64> d_left;
-            BitField<13, 1, u64> d_up;
-            BitField<14, 1, u64> d_right;
-            BitField<15, 1, u64> d_down;
-
-            // Left JoyStick
-            BitField<16, 1, u64> l_stick_left;
-            BitField<17, 1, u64> l_stick_up;
-            BitField<18, 1, u64> l_stick_right;
-            BitField<19, 1, u64> l_stick_down;
-
-            // Right JoyStick
-            BitField<20, 1, u64> r_stick_left;
-            BitField<21, 1, u64> r_stick_up;
-            BitField<22, 1, u64> r_stick_right;
-            BitField<23, 1, u64> r_stick_down;
-
-            // Not always active?
-            BitField<24, 1, u64> left_sl;
-            BitField<25, 1, u64> left_sr;
-
-            BitField<26, 1, u64> right_sl;
-            BitField<27, 1, u64> right_sr;
-        };
-    };
-    static_assert(sizeof(ControllerPadState) == 8, "ControllerPadState is an invalid size");
-
-    struct AnalogPosition {
-        s32_le x;
-        s32_le y;
-    };
-    static_assert(sizeof(AnalogPosition) == 8, "AnalogPosition is an invalid size");
-
     struct ConnectionState {
         union {
             u32_le raw{};
@@ -247,13 +279,6 @@ private:
         };
     };
     static_assert(sizeof(ConnectionState) == 4, "ConnectionState is an invalid size");
-
-    struct ControllerPad {
-        ControllerPadState pad_states;
-        AnalogPosition l_stick;
-        AnalogPosition r_stick;
-    };
-    static_assert(sizeof(ControllerPad) == 0x18, "ControllerPad is an invalid size");
 
     struct GenericStates {
         s64_le timestamp;
@@ -316,13 +341,6 @@ private:
         };
     };
 
-    struct MotionDevice {
-        Common::Vec3f accel;
-        Common::Vec3f gyro;
-        Common::Vec3f rotation;
-        std::array<Common::Vec3f, 3> orientation;
-    };
-
     struct NPadEntry {
         NPadType joy_styles;
         NPadAssignments pad_assignment;
@@ -364,7 +382,6 @@ private:
 
     void InitNewlyAddedController(std::size_t controller_idx);
     bool IsControllerSupported(NPadControllerType controller) const;
-    void RequestPadStateUpdate(u32 npad_id);
 
     u32 press_state{};
 
@@ -395,6 +412,8 @@ private:
     bool sixaxis_sensors_enabled{true};
     bool sixaxis_at_rest{true};
     std::array<ControllerPad, 10> npad_pad_states{};
+    std::array<MotionDevice, 2> motion_devices;
+    std::array<bool, 10> outside_input_enabled{true};
     bool is_in_lr_assignment_mode{false};
     Core::System& system;
 };

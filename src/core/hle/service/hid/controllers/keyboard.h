@@ -30,7 +30,8 @@ public:
     // Called when input devices should be loaded
     void OnLoadInputDevices() override;
 
-private:
+    void RequestKeyboardStateUpdate();
+
     struct KeyboardState {
         s64_le sampling_number;
         s64_le sampling_number2;
@@ -41,6 +42,16 @@ private:
     };
     static_assert(sizeof(KeyboardState) == 0x38, "KeyboardState is an invalid size");
 
+    // Used to obtain a raw handle to a controller
+    // Specifically for the plugin manager
+    KeyboardState& GetRawHandle();
+
+    // Enable input from user (as opposed to from a plugin) for this controller
+    // Specifically for the plugin manager
+    void EnableOutsideInput(bool enable);
+    bool IsEnabledOutsideInput();
+
+private:
     struct SharedMemory {
         CommonHeader header;
         std::array<KeyboardState, 17> pad_states;
@@ -53,5 +64,6 @@ private:
         keyboard_keys;
     std::array<std::unique_ptr<Input::ButtonDevice>, Settings::NativeKeyboard::NumKeyboardMods>
         keyboard_mods;
+    bool outside_input_enabled{true};
 };
 } // namespace Service::HID

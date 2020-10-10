@@ -38,6 +38,25 @@ void Controller_Keyboard::OnUpdate(const Core::Timing::CoreTiming& core_timing, 
     cur_entry.sampling_number = last_entry.sampling_number + 1;
     cur_entry.sampling_number2 = cur_entry.sampling_number;
 
+    if (outside_input_enabled) {
+        RequestKeyboardStateUpdate();
+    }
+
+    std::memcpy(data + SHARED_MEMORY_OFFSET, &shared_memory, sizeof(SharedMemory));
+}
+
+void Controller_Keyboard::OnLoadInputDevices() {
+    std::transform(Settings::values.keyboard_keys.begin(), Settings::values.keyboard_keys.end(),
+                   keyboard_keys.begin(), Input::CreateDevice<Input::ButtonDevice>);
+    std::transform(Settings::values.keyboard_mods.begin(), Settings::values.keyboard_mods.end(),
+                   keyboard_mods.begin(), Input::CreateDevice<Input::ButtonDevice>);
+}
+
+void Controller_Keyboard::RequestKeyboardStateUpdate() {
+    const auto& last_entry = shared_memory.pad_states[shared_memory.header.last_entry_index];
+    shared_memory.header.last_entry_index = (shared_memory.header.last_entry_index + 1) % 17;
+    auto& cur_entry = shared_memory.pad_states[shared_memory.header.last_entry_index];
+
     cur_entry.key.fill(0);
     cur_entry.modifier = 0;
     if (Settings::values.keyboard_enabled) {
@@ -50,13 +69,16 @@ void Controller_Keyboard::OnUpdate(const Core::Timing::CoreTiming& core_timing, 
             cur_entry.modifier |= (keyboard_mods[i]->GetStatus() << i);
         }
     }
-    std::memcpy(data + SHARED_MEMORY_OFFSET, &shared_memory, sizeof(SharedMemory));
 }
 
-void Controller_Keyboard::OnLoadInputDevices() {
-    std::transform(Settings::values.keyboard_keys.begin(), Settings::values.keyboard_keys.end(),
-                   keyboard_keys.begin(), Input::CreateDevice<Input::ButtonDevice>);
-    std::transform(Settings::values.keyboard_mods.begin(), Settings::values.keyboard_mods.end(),
-                   keyboard_mods.begin(), Input::CreateDevice<Input::ButtonDevice>);
+Controller_Keyboard::KeyboardState& Controller_Keyboard::GetRawHandle() {
+    return shared_memory.pad_states[shared_memory.header.last_entry_index];
+}
+
+void Controller_Keyboard::EnableOutsideInput(bool enable) {
+    outside_input_enabled = enable;
+}
+bool Controller_Keyboard::IsEnabledOutsideInput() {
+    return outside_input_enabled;
 }
 } // namespace Service::HID

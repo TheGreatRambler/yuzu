@@ -335,6 +335,21 @@ void Controller_NPad::RequestPadStateUpdate(u32 npad_id) {
     }
 }
 
+void Controller_NPad::RequestMotionUpdate(u32 npad_id) {
+    if (sixaxis_sensors_enabled && Settings::values.motion_enabled) {
+        sixaxis_at_rest = true;
+        for (std::size_t e = 0; e < motion_devices.size(); ++e) {
+            const auto& device = motions[NPadIdToIndex(npad_id)][e];
+            if (device) {
+                std::tie(motion_devices[e].accel, motion_devices[e].gyro,
+                         motion_devices[e].rotation, motion_devices[e].orientation) =
+                    device->GetStatus();
+                sixaxis_at_rest = sixaxis_at_rest && motion_devices[e].gyro.Length2() < 0.0001f;
+            }
+        }
+    }
+}
+
 void Controller_NPad::OnUpdate(const Core::Timing::CoreTiming& core_timing, u8* data,
                                std::size_t data_len) {
     if (!IsControllerActivated()) {
@@ -374,7 +389,9 @@ void Controller_NPad::OnUpdate(const Core::Timing::CoreTiming& core_timing, u8* 
         }
         const u32 npad_index = static_cast<u32>(i);
 
-        RequestPadStateUpdate(npad_index);
+        if (IsEnabledOutsideInput(npad_index)) {
+            RequestPadStateUpdate(npad_index);
+        }
         auto& pad_state = npad_pad_states[npad_index];
 
         auto& main_controller =
@@ -525,20 +542,10 @@ void Controller_NPad::OnMotionUpdate(const Core::Timing::CoreTiming& core_timing
             cur_entry.timestamp2 = cur_entry.timestamp;
         }
 
-        // Try to read sixaxis sensor states
-        std::array<MotionDevice, 2> motion_devices;
+        const u32 npad_index = static_cast<u32>(i);
 
-        if (sixaxis_sensors_enabled && Settings::values.motion_enabled) {
-            sixaxis_at_rest = true;
-            for (std::size_t e = 0; e < motion_devices.size(); ++e) {
-                const auto& device = motions[i][e];
-                if (device) {
-                    std::tie(motion_devices[e].accel, motion_devices[e].gyro,
-                             motion_devices[e].rotation, motion_devices[e].orientation) =
-                        device->GetStatus();
-                    sixaxis_at_rest = sixaxis_at_rest && motion_devices[e].gyro.Length2() < 0.0001f;
-                }
-            }
+        if (IsEnabledOutsideInput(npad_index)) {
+            RequestMotionUpdate(npad_index);
         }
 
         auto& main_controller =
@@ -895,6 +902,22 @@ void Controller_NPad::ClearAllControllers() {
 
 u32 Controller_NPad::GetAndResetPressState() {
     return std::exchange(press_state, 0);
+}
+
+Controller_NPad::ControllerPad& Controller_NPad::GetRawHandle(u32 npad_id) {
+    return npad_pad_states[NPadIdToIndex(npad_id)];
+}
+
+Controller_NPad::MotionDevice& Controller_NPad::GetRawMotionHandle(u32 npad_id) {
+    return motion_devices[NPadIdToIndex(npad_id)];
+}
+
+void Controller_NPad::EnableOutsideInput(u32 npad_id, bool enable) {
+    outside_input_enabled[NPadIdToIndex(npad_id)] = enable;
+}
+
+bool Controller_NPad::IsEnabledOutsideInput(u32 npad_id) {
+    return outside_input_enabled[NPadIdToIndex(npad_id)];
 }
 
 bool Controller_NPad::IsControllerSupported(NPadControllerType controller) const {

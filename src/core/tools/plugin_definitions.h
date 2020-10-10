@@ -2,6 +2,8 @@
 
 #define PLUGIN_INTERFACE_VERSION 0
 
+#define BIT(n) (1U << (n))
+
 #include <cstdint>
 #include <cstring>
 
@@ -16,25 +18,20 @@ enum class LogLevel : uint8_t {
     Critical,
 };
 
-enum class EnableInputType : uint8_t {
-    // Yuzu provides the input for every input type
-    EnableAll,
-    // Yuzu provides the input for only this device
-    // The rest can be set by the plugin
-    EnableController1,
-    EnableController2,
-    EnableController3,
-    EnableController4,
-    EnableController5,
-    EnableController6,
-    EnableController7,
-    EnableController8,
-    EnableControllerHandheld,
-    EnableTouchpad,
-    EnableMouseKeyboard,
-    // Yuzu provides none of the input
-    // It is all provided by the plugin
-    EnableNone,
+enum class EnableInputType : uint16_t {
+    None = 0,
+    EnableController1 = BIT(0),
+    EnableController2 = BIT(1),
+    EnableController3 = BIT(2),
+    EnableController4 = BIT(3),
+    EnableController5 = BIT(4),
+    EnableController6 = BIT(5),
+    EnableController7 = BIT(6),
+    EnableController8 = BIT(7),
+    EnableControllerHandheld = BIT(8),
+    EnableTouchpad = BIT(9),
+    EnableMouseKeyboard = BIT(10),
+    All = BIT(11),
 };
 
 enum class YuzuJoystickType : uint8_t {
@@ -88,6 +85,19 @@ enum class ControllerType : uint8_t {
     DualJoycon,
     RightJoycon,
     LeftJoycon,
+};
+
+enum class ControllerNumber : uint8_t {
+    Controller1,
+    Controller2,
+    Controller3,
+    Controller4,
+    Controller5,
+    Controller6,
+    Controller7,
+    Controller8,
+    Handheld,
+    Unknown,
 };
 
 enum class KeyboardValues : uint8_t {
@@ -401,26 +411,27 @@ typedef uint64_t(debugger_getcputicks)(void* ctx);
 
 // Joypad Library (Modified, based on libnx standards)
 
-typedef uint64_t(joypad_read)(void* ctx, uint8_t player);
-typedef uint64_t(joypad_immediate)(void* ctx, uint8_t player);
+typedef uint64_t(joypad_read)(void* ctx, ControllerNumber player);
 // table joypad.getdown(int player) ignored
 // table joypad.readdown(int player) ignored
 // table joypad.getup(int player) ignored
 // table joypad.readup(int player) ignored
-typedef void(joypad_set)(void* ctx, uint8_t player, uint64_t input);
+typedef void(joypad_set)(void* ctx, ControllerNumber player, uint64_t input);
 
-typedef int16_t(joypad_readjoystick)(void* ctx, uint8_t player, YuzuJoystickType type);
-typedef void(joypad_setjoystick)(void* ctx, uint8_t player, YuzuJoystickType type, int16_t val);
+typedef int16_t(joypad_readjoystick)(void* ctx, ControllerNumber player, YuzuJoystickType type);
+typedef void(joypad_setjoystick)(void* ctx, ControllerNumber player, YuzuJoystickType type,
+                                 int16_t val);
 
-typedef float(joypad_readsixaxis)(void* ctx, uint8_t player, SixAxisMotionTypes type);
-typedef void(joypad_setsixaxis)(void* ctx, uint8_t player, SixAxisMotionTypes type, float val);
+typedef float(joypad_readsixaxis)(void* ctx, ControllerNumber player, SixAxisMotionTypes type);
+typedef void(joypad_setsixaxis)(void* ctx, ControllerNumber player, SixAxisMotionTypes type,
+                                float val);
 
 // Add controllers
 typedef void(joypad_addjoypad)(void* ctx, ControllerType type);
 // Remove all controllers
 typedef void(joypad_removealljoypads)(void* ctx);
 // Set controller type at index
-typedef void(joypad_setjoypadtype)(void* ctx, uint8_t player, ControllerType type);
+typedef void(joypad_setjoypadtype)(void* ctx, ControllerNumber player, ControllerType type);
 // Get number of controllers
 typedef uint8_t(joypad_getnumjoypads)(void* ctx);
 

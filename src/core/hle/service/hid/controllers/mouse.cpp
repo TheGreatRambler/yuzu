@@ -36,6 +36,24 @@ void Controller_Mouse::OnUpdate(const Core::Timing::CoreTiming& core_timing, u8*
     cur_entry.sampling_number = last_entry.sampling_number + 1;
     cur_entry.sampling_number2 = cur_entry.sampling_number;
 
+    if (outside_input_enabled) {
+        RequestMouseStateUpdate();
+    }
+
+    std::memcpy(data + SHARED_MEMORY_OFFSET, &shared_memory, sizeof(SharedMemory));
+}
+
+void Controller_Mouse::OnLoadInputDevices() {
+    mouse_device = Input::CreateDevice<Input::MouseDevice>(Settings::values.mouse_device);
+    std::transform(Settings::values.mouse_buttons.begin(), Settings::values.mouse_buttons.end(),
+                   mouse_button_devices.begin(), Input::CreateDevice<Input::ButtonDevice>);
+}
+
+void Controller_Mouse::RequestMouseStateUpdate() {
+    auto& last_entry = shared_memory.mouse_states[shared_memory.header.last_entry_index];
+    shared_memory.header.last_entry_index = (shared_memory.header.last_entry_index + 1) % 17;
+    auto& cur_entry = shared_memory.mouse_states[shared_memory.header.last_entry_index];
+
     if (Settings::values.mouse_enabled) {
         const auto [px, py, sx, sy] = mouse_device->GetStatus();
         const auto x = static_cast<s32>(px * Layout::ScreenUndocked::Width);
@@ -51,13 +69,16 @@ void Controller_Mouse::OnUpdate(const Core::Timing::CoreTiming& core_timing, u8*
             cur_entry.button |= (mouse_button_devices[i]->GetStatus() << i);
         }
     }
-
-    std::memcpy(data + SHARED_MEMORY_OFFSET, &shared_memory, sizeof(SharedMemory));
 }
 
-void Controller_Mouse::OnLoadInputDevices() {
-    mouse_device = Input::CreateDevice<Input::MouseDevice>(Settings::values.mouse_device);
-    std::transform(Settings::values.mouse_buttons.begin(), Settings::values.mouse_buttons.end(),
-                   mouse_button_devices.begin(), Input::CreateDevice<Input::ButtonDevice>);
+Controller_Mouse::MouseState& Controller_Mouse::GetRawHandle() {
+    return shared_memory.mouse_states[shared_memory.header.last_entry_index];
+}
+
+void Controller_Mouse::EnableOutsideInput(bool enable) {
+    outside_input_enabled = enable;
+}
+bool Controller_Mouse::IsEnabledOutsideInput() {
+    return outside_input_enabled;
 }
 } // namespace Service::HID
