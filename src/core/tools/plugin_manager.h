@@ -50,6 +50,11 @@ namespace Loader {
 enum class ResultStatus : u16;
 } // namespace Loader
 
+namespace Service::HID {
+class IAppletResource;
+} // namespace Service::HID
+
+namespace Tools {
 struct Plugin {
     bool ready{false};
     std::atomic_bool processedMainLoop{false};
@@ -59,6 +64,7 @@ struct Plugin {
     std::unique_ptr<std::thread> pluginThread;
     bool pluginAvailable;
     Tools::PluginManager* pluginManager;
+    std::shared_ptr<Service::HID::IAppletResource> hidAppletResource;
     Core::System* system;
 #ifdef _WIN32
     HMODULE sharedLibHandle;
@@ -67,8 +73,6 @@ struct Plugin {
     void* sharedLibHandle;
 #endif
 };
-
-namespace Tools {
 
 /**
  * This class allows the user to enable plugins that give a DLL access to the game. This can enable

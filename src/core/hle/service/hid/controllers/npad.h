@@ -114,7 +114,6 @@ public:
     };
 
     // Exposed to be used by plugin manager
-
     struct ControllerPadState {
         union {
             u64_le raw{};

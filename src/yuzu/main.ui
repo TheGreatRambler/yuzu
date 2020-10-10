@@ -108,6 +108,8 @@
     <addaction name="action_Rederive"/>
     <addaction name="separator"/>
     <addaction name="action_Capture_Screenshot"/>
+    <addaction name="separator"/>
+    <addaction name="action_Open_Plugin_Manager"/>
    </widget>
    <widget class="QMenu" name="menu_Help">
     <property name="title">
@@ -176,6 +178,11 @@
   <action name="action_Rederive">
    <property name="text">
     <string>Reinitialize keys...</string>
+   </property>
+  </action>
+  <action name="action_Open_Plugin_Manager">
+   <property name="text">
+    <string>Open Plugin Manager</string>
    </property>
   </action>
   <action name="action_About">

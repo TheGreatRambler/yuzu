@@ -81,10 +81,13 @@ enum class ButtonValues : uint8_t {
 };
 
 enum class ControllerType : uint8_t {
+    None,
     ProController,
-    DualJoycon,
-    RightJoycon,
-    LeftJoycon,
+    Handheld,
+    JoyDual,
+    JoyLeft,
+    JoyRight,
+    Pokeball,
 };
 
 enum class ControllerNumber : uint8_t {
@@ -427,13 +430,13 @@ typedef void(joypad_setsixaxis)(void* ctx, ControllerNumber player, SixAxisMotio
                                 float val);
 
 // Add controllers
-typedef void(joypad_addjoypad)(void* ctx, ControllerType type);
+typedef void(joypad_enablejoypad)(void* ctx, ControllerNumber player, uint8_t enable);
 // Remove all controllers
 typedef void(joypad_removealljoypads)(void* ctx);
 // Set controller type at index
 typedef void(joypad_setjoypadtype)(void* ctx, ControllerNumber player, ControllerType type);
 // Get number of controllers
-typedef uint8_t(joypad_getnumjoypads)(void* ctx);
+typedef uint8_t(joypad_isjoypadconnected)(void* ctx, ControllerNumber player);
 
 // Input Library
 

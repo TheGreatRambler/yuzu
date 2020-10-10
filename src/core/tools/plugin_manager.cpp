@@ -24,48 +24,6 @@
 #include "core/tools/plugin_manager.h"
 
 namespace Tools {
-namespace {
-/*
-constexpr s64 MEMORY_FREEZER_TICKS = static_cast<s64>(1000000000 / 60);
-
-u64 MemoryReadWidth(Core::Memory::Memory& memory, u32 width, VAddr addr) {
-    switch (width) {
-    case 1:
-        return memory.Read8(addr);
-    case 2:
-        return memory.Read16(addr);
-    case 4:
-        return memory.Read32(addr);
-    case 8:
-        return memory.Read64(addr);
-    default:
-        UNREACHABLE();
-        return 0;
-    }
-}
-
-void MemoryWriteWidth(Core::Memory::Memory& memory, u32 width, VAddr addr, u64 value) {
-    switch (width) {
-    case 1:
-        memory.Write8(addr, static_cast<u8>(value));
-        break;
-    case 2:
-        memory.Write16(addr, static_cast<u16>(value));
-        break;
-    case 4:
-        memory.Write32(addr, static_cast<u32>(value));
-        break;
-    case 8:
-        memory.Write64(addr, value);
-        break;
-    default:
-        UNREACHABLE();
-    }
-}
-*/
-
-} // Anonymous namespace
-
 PluginManager::PluginManager(Core::Timing::CoreTiming& core_timing_, Core::Memory::Memory& memory_,
                              Core::System& system_)
     : core_timing{core_timing_}, memory{memory_}, system{system_} {
@@ -233,6 +191,8 @@ bool PluginManager::LoadPlugin(std::string path) {
     }
 
     plugin->system = &system;
+    plugin->hidAppletResource =
+        system.ServiceManager().GetService<Service::HID::Hid>("hid")->GetAppletResource();
 
     setup(plugin.get());
 
@@ -414,32 +374,20 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
     ADD_FUNCTION_TO_PLUGIN(joypad_read,
         [](void* ctx, PluginDefinitions::ControllerNumber player) -> uint64_t {
             Plugin* self = (Plugin*)ctx;
-            Service::SM::ServiceManager& sm = self->system->ServiceManager();
-            Service::HID::Controller_NPad& npad =
-                sm.GetService<Service::HID::Hid>("hid")
-                    ->GetAppletResource()
-                    ->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
+            Service::HID::Controller_NPad& npad = self->hidAppletResource->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
             return npad.GetRawHandle((uint32_t) player).pad_states.raw;
     })
     ADD_FUNCTION_TO_PLUGIN(joypad_set,
         [](void* ctx, PluginDefinitions::ControllerNumber player, uint64_t input) -> void {
             Plugin* self = (Plugin*)ctx;
-            Service::SM::ServiceManager& sm = self->system->ServiceManager();
-            Service::HID::Controller_NPad& npad =
-                sm.GetService<Service::HID::Hid>("hid")
-                    ->GetAppletResource()
-                    ->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
+            Service::HID::Controller_NPad& npad = self->hidAppletResource->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
             npad.GetRawHandle((uint32_t) player).pad_states.raw = input;
     })
     ADD_FUNCTION_TO_PLUGIN(joypad_readjoystick,
         [](void* ctx, PluginDefinitions::ControllerNumber player,
         PluginDefinitions::YuzuJoystickType type) -> int16_t {
             Plugin* self = (Plugin*)ctx;
-            Service::SM::ServiceManager& sm = self->system->ServiceManager();
-            Service::HID::Controller_NPad& npad =
-                sm.GetService<Service::HID::Hid>("hid")
-                    ->GetAppletResource()
-                    ->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
+            Service::HID::Controller_NPad& npad = self->hidAppletResource->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
             npad.RequestPadStateUpdate((uint32_t) player);
             auto& handle = npad.GetRawHandle((uint32_t) player);
             switch(type) {
@@ -457,11 +405,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
         [](void* ctx, PluginDefinitions::ControllerNumber player,
         PluginDefinitions::YuzuJoystickType type, int16_t input) -> void {
             Plugin* self = (Plugin*)ctx;
-            Service::SM::ServiceManager& sm = self->system->ServiceManager();
-            Service::HID::Controller_NPad& npad =
-                sm.GetService<Service::HID::Hid>("hid")
-                    ->GetAppletResource()
-                    ->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
+            Service::HID::Controller_NPad& npad = self->hidAppletResource->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
             auto& handle = npad.GetRawHandle((uint32_t) player);
             switch(type) {
                 case PluginDefinitions::YuzuJoystickType::LeftX:
@@ -482,11 +426,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
         [](void* ctx, PluginDefinitions::ControllerNumber player,
         PluginDefinitions::SixAxisMotionTypes type) -> float {
             Plugin* self = (Plugin*)ctx;
-            Service::SM::ServiceManager& sm = self->system->ServiceManager();
-            Service::HID::Controller_NPad& npad =
-                sm.GetService<Service::HID::Hid>("hid")
-                    ->GetAppletResource()
-                    ->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
+            Service::HID::Controller_NPad& npad = self->hidAppletResource->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
             npad.RequestMotionUpdate((uint32_t) player);
             auto& handle = npad.GetRawMotionHandle((uint32_t) player);
             switch(type) {
@@ -532,11 +472,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
         [](void* ctx, PluginDefinitions::ControllerNumber player,
         PluginDefinitions::SixAxisMotionTypes type, float input) -> void {
             Plugin* self = (Plugin*)ctx;
-            Service::SM::ServiceManager& sm = self->system->ServiceManager();
-            Service::HID::Controller_NPad& npad =
-                sm.GetService<Service::HID::Hid>("hid")
-                    ->GetAppletResource()
-                    ->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
+            Service::HID::Controller_NPad& npad = self->hidAppletResource->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
             auto& handle = npad.GetRawMotionHandle((uint32_t) player);
             switch(type) {
                 case PluginDefinitions::SixAxisMotionTypes::AccelerationX:
@@ -595,18 +531,42 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                     break;
             }
     })
+    ADD_FUNCTION_TO_PLUGIN(joypad_enablejoypad,
+        [](void* ctx, PluginDefinitions::ControllerNumber player, uint8_t enable) -> void {
+            Plugin* self = (Plugin*)ctx;
+            Service::HID::Controller_NPad& npad =
+                self->hidAppletResource->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
+            size_t index = (size_t) player;
+            auto type = npad.MapSettingsTypeToNPad(Settings::values.players[index].controller_type);
+            npad.UpdateControllerAt(type, (size_t) player, enable);
+    })
+    ADD_FUNCTION_TO_PLUGIN(joypad_removealljoypads,
+        [](void* ctx) -> void {
+            Plugin* self = (Plugin*)ctx;
+            Service::HID::Controller_NPad& npad =
+                self->hidAppletResource->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
+            npad.DisconnectAllConnectedControllers();
+    })
+    ADD_FUNCTION_TO_PLUGIN(joypad_setjoypadtype,
+        [](void* ctx, PluginDefinitions::ControllerNumber player, PluginDefinitions::ControllerType type) -> void {
+            Plugin* self = (Plugin*)ctx;
+            Service::HID::Controller_NPad& npad =
+                self->hidAppletResource->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
+            size_t index = (size_t) player;
+            using npadType = Service::HID::Controller_NPad::NPadControllerType;
+            npad.UpdateControllerAt((npadType) type, (size_t) player,
+                Settings::values.players[index].connected);
+    })
+    ADD_FUNCTION_TO_PLUGIN(joypad_isjoypadconnected,
+        [](void* ctx, PluginDefinitions::ControllerNumber player) -> uint8_t {
+            Plugin* self = (Plugin*)ctx;
+            Service::HID::Controller_NPad& npad =
+                self->hidAppletResource->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
+            return Settings::values.players[(size_t) player].connected;
+    })
     // clang-format on
     /*
-    // Add controllers
-    typedef void(joypad_addjoypad)(void* ctx, ControllerType type);
-    // Remove all controllers
-    typedef void(joypad_removealljoypads)(void* ctx);
-    // Set controller type at index
-    typedef void(joypad_setjoypadtype)(void* ctx, ControllerNumber player, ControllerType
-    type);
-    // Get number of controllers
-    typedef uint8_t(joypad_getnumjoypads)(void* ctx);
-    */
+     */
 }
 
 /*

@@ -941,6 +941,8 @@ void GMainWindow::ConnectMenuEvents() {
     connect(ui.action_Open_yuzu_Folder, &QAction::triggered, this, &GMainWindow::OnOpenYuzuFolder);
     connect(ui.action_Rederive, &QAction::triggered, this,
             std::bind(&GMainWindow::OnReinitializeKeys, this, ReinitializeKeyBehavior::Warning));
+    connect(ui.action_Open_Plugin_Manager, &QAction::triggered, this,
+            &GMainWindow::OnOpenPluginManager);
     connect(ui.action_About, &QAction::triggered, this, &GMainWindow::OnAbout);
 }
 
@@ -2357,6 +2359,8 @@ void GMainWindow::OnOpenYuzuFolder() {
     QDesktopServices::openUrl(QUrl::fromLocalFile(
         QString::fromStdString(Common::FS::GetUserPath(Common::FS::UserPath::UserDir))));
 }
+
+void GMainWindow::OnOpenPluginManager() {}
 
 void GMainWindow::OnAbout() {
     AboutDialog aboutDialog(this);
