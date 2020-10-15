@@ -140,6 +140,8 @@ add_executable(yuzu
     util/util.h
     compatdb.cpp
     compatdb.h
+    plugin_manager.cpp
+    plugin_manager.h
     yuzu.rc
 )
 

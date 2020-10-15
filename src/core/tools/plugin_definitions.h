@@ -333,12 +333,11 @@ enum class SixAxisMotionTypes : uint8_t {
     DirectionZZ,
 };
 
-// NOTE: Every time a char string is returned, it must be freed by the DLL
-
 typedef void(meta_setup_plugin)(void*);
 typedef void(meta_handle_main_loop)();
 typedef void(meta_add_function)(void*);
 typedef uint64_t(meta_getplugininterfaceversion)();
+typedef void(meta_handle_close)();
 
 // Memory passed to the DLL that is allocated must be freed with this function
 typedef void(meta_free)(void*);

@@ -1,4 +1,4 @@
-// Copyright 2019 yuzu Emulator Project
+// Copyright 2020 yuzu Emulator Project
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
@@ -73,10 +73,20 @@ void PluginManager::ProcessScript(std::shared_ptr<Plugin> plugin) {
         plugin->pluginCv.wait(
             lk, [plugin] { return plugin->processedMainLoop || plugin->encounteredVsync; });
 
+        if (plugin->hasStopped) {
+            // Need to remove this plugin permanently
+            plugin->pluginThread->join();
+            temp_plugins_to_remove.push_back(plugin);
+        }
+
         if (plugin->processedMainLoop.load(std::memory_order_relaxed)) {
             // This main loop is done
             plugin->processedMainLoop = false;
             plugin->encounteredVsync = false;
+
+            if (loaded_plugins.find(plugin->path) == loaded_plugins.end()) {
+                plugin->hasStopped = true;
+            }
 
             // pluginThread->join();
         }
@@ -112,6 +122,20 @@ void PluginManager::ProcessScriptFromVsync() {
             ProcessScript(plugin);
         }
     }
+
+    for (auto& plugin : temp_plugins_to_remove) {
+        GetDllFunction<PluginDefinitions::meta_handle_close>(*plugin, "onClose")();
+
+#ifdef _WIN32
+        FreeLibrary(plugin->sharedLibHandle);
+#endif
+#if defined(__linux__) || defined(__APPLE__)
+        dlclose(plugin->sharedLibHandle);
+#endif
+
+        // The plugin will now be freed
+        plugins.erase(std::find(plugins.begin(), plugins.end(), plugin));
+    }
 }
 
 void PluginManager::PluginThreadExecuter(std::shared_ptr<Plugin> plugin) {
@@ -119,9 +143,15 @@ void PluginManager::PluginThreadExecuter(std::shared_ptr<Plugin> plugin) {
         std::unique_lock<std::mutex> lk(plugin->pluginMutex);
         plugin->pluginCv.wait(lk, [this, plugin] { return plugin->ready; });
         plugin->ready = false;
+
+        if (plugin->hasStopped) {
+            plugin->processedMainLoop = true;
+            return;
+        }
+
         // Call shared lib main loop function, should already be loaded
         // Could be instead obtained once, TODO
-        GetDllFunction<PluginDefinitions::meta_handle_main_loop>(*plugin, "handleMainLoop")();
+        GetDllFunction<PluginDefinitions::meta_handle_main_loop>(*plugin, "onMainLoop")();
 
         // Once the end of this function is reached, the main loop must have completed
         lk.unlock();
@@ -132,20 +162,16 @@ void PluginManager::PluginThreadExecuter(std::shared_ptr<Plugin> plugin) {
 
 std::string PluginManager::GetLastDllError() {
 #ifdef _WIN32
-    // Get the error message, if any.
-    DWORD errorMessageID = ::GetLastError();
+    DWORD errorMessageID = GetLastError();
     if (errorMessageID == 0)
-        return std::string(); // No error message has been recorded
+        return "";
 
     LPSTR messageBuffer = nullptr;
     size_t size = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
                                      FORMAT_MESSAGE_IGNORE_INSERTS,
                                  NULL, errorMessageID, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
                                  (LPSTR)&messageBuffer, 0, NULL);
-
     std::string message(messageBuffer, size);
-
-    // Free the buffer.
     LocalFree(messageBuffer);
 
     return message;
@@ -157,6 +183,7 @@ std::string PluginManager::GetLastDllError() {
 
 bool PluginManager::LoadPlugin(std::string path) {
     std::shared_ptr<Plugin> plugin = std::make_shared<Plugin>();
+    plugin->path = path;
 
 #ifdef _WIN32
     plugin->sharedLibHandle = LoadLibraryEx(path.c_str(), NULL, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
@@ -189,6 +216,8 @@ bool PluginManager::LoadPlugin(std::string path) {
         // Neccessary functions not avalible
         return false;
     }
+
+    loaded_plugins.insert(path);
 
     plugin->system = &system;
     plugin->hidAppletResource =
@@ -553,8 +582,8 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             Service::HID::Controller_NPad& npad =
                 self->hidAppletResource->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
             size_t index = (size_t) player;
-            using npadType = Service::HID::Controller_NPad::NPadControllerType;
-            npad.UpdateControllerAt((npadType) type, (size_t) player,
+            using NpadType = Service::HID::Controller_NPad::NPadControllerType;
+            npad.UpdateControllerAt((NpadType) type, index,
                 Settings::values.players[index].connected);
     })
     ADD_FUNCTION_TO_PLUGIN(joypad_isjoypadconnected,
@@ -565,116 +594,5 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             return Settings::values.players[(size_t) player].connected;
     })
     // clang-format on
-    /*
-     */
 }
-
-/*
-void Freezer::Clear() {
-    std::lock_guard lock{entries_mutex};
-
-    LOG_DEBUG(Common_Memory, "Clearing all frozen memory values.");
-
-    entries.clear();
-}
-
-u64 Freezer::Freeze(VAddr address, u32 width) {
-    std::lock_guard lock{entries_mutex};
-
-    const auto current_value = MemoryReadWidth(memory, width, address);
-    entries.push_back({address, width, current_value});
-
-    LOG_DEBUG(Common_Memory,
-              "Freezing memory for address={:016X}, width={:02X}, current_value={:016X}",
-address, width, current_value);
-
-    return current_value;
-}
-
-void Freezer::Unfreeze(VAddr address) {
-    std::lock_guard lock{entries_mutex};
-
-    LOG_DEBUG(Common_Memory, "Unfreezing memory for address={:016X}", address);
-
-    entries.erase(
-        std::remove_if(entries.begin(), entries.end(),
-                       [&address](const Entry& entry) { return entry.address == address; }),
-        entries.end());
-}
-
-bool Freezer::IsFrozen(VAddr address) const {
-    std::lock_guard lock{entries_mutex};
-
-    return std::find_if(entries.begin(), entries.end(), [&address](const Entry& entry) {
-               return entry.address == address;
-           }) != entries.end();
-}
-
-void Freezer::SetFrozenValue(VAddr address, u64 value) {
-    std::lock_guard lock{entries_mutex};
-
-    const auto iter = std::find_if(entries.begin(), entries.end(), [&address](const Entry&
-entry) { return entry.address == address;
-    });
-
-    if (iter == entries.end()) {
-        LOG_ERROR(Common_Memory,
-                  "Tried to set freeze value for address={:016X} that is not frozen!",
-address); return;
-    }
-
-    LOG_DEBUG(Common_Memory,
-              "Manually overridden freeze value for address={:016X}, width={:02X} to
-value={:016X}", iter->address, iter->width, value); iter->value = value;
-}
-
-std::optional<Freezer::Entry> Freezer::GetEntry(VAddr address) const {
-    std::lock_guard lock{entries_mutex};
-
-    const auto iter = std::find_if(entries.begin(), entries.end(), [&address](const Entry&
-entry) { return entry.address == address;
-    });
-
-    if (iter == entries.end()) {
-        return std::nullopt;
-    }
-
-    return *iter;
-}
-
-std::vector<Freezer::Entry> Freezer::GetEntries() const {
-    std::lock_guard lock{entries_mutex};
-
-    return entries;
-}
-
-void Freezer::FrameCallback(u64 userdata, s64 ns_late) {
-    if (!IsActive()) {
-        LOG_DEBUG(Common_Memory, "Memory freezer has been deactivated, ending callback
-events."); return;
-    }
-
-    std::lock_guard lock{entries_mutex};
-
-    for (const auto& entry : entries) {
-        LOG_DEBUG(Common_Memory,
-                  "Enforcing memory freeze at address={:016X}, value={:016X}, width={:02X}",
-                  entry.address, entry.value, entry.width);
-        MemoryWriteWidth(memory, entry.width, entry.address, entry.value);
-    }
-
-    core_timing.ScheduleEvent(MEMORY_FREEZER_TICKS - ns_late, event);
-}
-
-void Freezer::FillEntryReads() {
-    std::lock_guard lock{entries_mutex};
-
-    LOG_DEBUG(Common_Memory, "Updating memory freeze entries to current values.");
-
-    for (auto& entry : entries) {
-        entry.value = MemoryReadWidth(memory, entry.width, entry.address);
-    }
-}
-*/
-
 } // namespace Tools

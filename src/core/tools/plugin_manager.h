@@ -1,4 +1,4 @@
-// Copyright 2019 yuzu Emulator Project
+// Copyright 2020 yuzu Emulator Project
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
@@ -14,6 +14,8 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
+#include <string>
 #include <vector>
 #include "common/common_types.h"
 
@@ -57,8 +59,10 @@ class IAppletResource;
 namespace Tools {
 struct Plugin {
     bool ready{false};
+    std::string path;
     std::atomic_bool processedMainLoop{false};
     std::atomic_bool encounteredVsync{false};
+    bool hasStopped{false};
     std::mutex pluginMutex;
     std::condition_variable pluginCv;
     std::unique_ptr<std::thread> pluginThread;
@@ -95,42 +99,13 @@ public:
     void ProcessScriptFromIdle();
     void ProcessScriptFromVsync();
 
-    /*
-        // Removes all entries from the freezer.
-        void Clear();
+    bool LoadPlugin(std::string path);
+    void RemovePlugin(std::string path) {
+        loaded_plugins.erase(std::find(loaded_plugins.begin(), loaded_plugins.end(), path));
+    }
+    const std::vector<std::string>& GetAllLoadedPlugins();
 
-        // Freezes a value to its current memory address. The value the memory is kept at will be
-       the
-        // value that is read during this function. Width can be 1, 2, 4, or 8 (in bytes).
-        u64 Freeze(VAddr address, u32 width);
-
-        // Unfreezes the memory value at address. If the address isn't frozen, this is a no-op.
-        void Unfreeze(VAddr address);
-
-        // Returns whether or not the address is frozen.
-        bool IsFrozen(VAddr address) const;
-
-        // Sets the value that address should be frozen to. This doesn't change the width set by
-       using
-        // Freeze(). If the value isn't frozen, this will not freeze it and is thus a no-op.
-        void SetFrozenValue(VAddr address, u64 value);
-
-        // Returns the entry corresponding to the address if the address is frozen, otherwise
-        // std::nullopt.
-        std::optional<Entry> GetEntry(VAddr address) const;
-
-        // Returns all the entries in the freezer, an empty vector means nothing is frozen.
-        std::vector<Entry> GetEntries() const;
-    */
 private:
-    /*
-        void FrameCallback(u64 userdata, s64 cycles_late);
-        void FillEntryReads();
-
-        mutable std::mutex entries_mutex;
-        std::vector<Entry> entries;
-    */
-
     std::string GetLastDllError();
 
     static char* GetAllocatedString(std::string& str) {
@@ -151,7 +126,6 @@ private:
 #endif
     }
 
-    bool LoadPlugin(std::string path);
     void ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin);
 
     void PluginThreadExecuter(std::shared_ptr<Plugin> plugin);
@@ -159,6 +133,8 @@ private:
     std::atomic_bool active{false};
 
     std::vector<std::shared_ptr<Plugin>> plugins;
+    std::set<std::string> loaded_plugins;
+    std::vector<std::shared_ptr<Plugin>> temp_plugins_to_remove;
 
     Core::Timing::CoreTiming& core_timing;
     Core::Memory::Memory& memory;
