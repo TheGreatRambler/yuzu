@@ -115,6 +115,7 @@ static FileSys::VirtualFile VfsDirectoryCreateFileWrapper(const FileSys::Virtual
 #include "yuzu/install_dialog.h"
 #include "yuzu/loading_screen.h"
 #include "yuzu/main.h"
+#include "yuzu/plugin_manager.h"
 #include "yuzu/uisettings.h"
 
 #ifdef USE_DISCORD_PRESENCE
@@ -2360,7 +2361,10 @@ void GMainWindow::OnOpenYuzuFolder() {
         QString::fromStdString(Common::FS::GetUserPath(Common::FS::UserPath::UserDir))));
 }
 
-void GMainWindow::OnOpenPluginManager() {}
+void GMainWindow::OnOpenPluginManager() {
+    PluginDialog pluginDialog(this);
+    pluginDialog.exec();
+}
 
 void GMainWindow::OnAbout() {
     AboutDialog aboutDialog(this);

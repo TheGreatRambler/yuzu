@@ -4,7 +4,9 @@
 
 #pragma once
 
+#include <functional>
 #include <QDialog>
+#include <QFileSystemWatcher>
 
 class QHBoxLayout;
 class QListWidget;
@@ -19,9 +21,14 @@ public:
     ~PluginDialog() override;
 
 private:
+    void pluginEnabledOrDisabled(QListWidgetItem* changed);
+
     void updateAvailablePlugins();
 
+    const QString plugins_path = QCoreApplication::applicationDirPath() + tr("/yuzu_plugins");
+
     QListWidget* plugin_list;
+    QFileSystemWatcher filesystem_watcher;
 
     QVBoxLayout* main_layout;
 };

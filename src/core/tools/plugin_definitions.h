@@ -1,6 +1,6 @@
 #pragma once
 
-#define PLUGIN_INTERFACE_VERSION 0
+#define PLUGIN_INTERFACE_VERSION 1
 
 #define BIT(n) (1U << (n))
 

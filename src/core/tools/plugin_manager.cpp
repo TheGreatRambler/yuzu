@@ -2,6 +2,10 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#ifndef __STRINGIFY
+#define __STRINGIFY(s) #s
+#endif
+
 #include "common/assert.h"
 #include "common/logging/log.h"
 #include "core/core.h"
@@ -87,8 +91,6 @@ void PluginManager::ProcessScript(std::shared_ptr<Plugin> plugin) {
             if (loaded_plugins.find(plugin->path) == loaded_plugins.end()) {
                 plugin->hasStopped = true;
             }
-
-            // pluginThread->join();
         }
     }
 }
@@ -135,6 +137,10 @@ void PluginManager::ProcessScriptFromVsync() {
 
         // The plugin will now be freed
         plugins.erase(std::find(plugins.begin(), plugins.end(), plugin));
+
+        if (plugin_list_update_callback) {
+            plugin_list_update_callback();
+        }
     }
 }
 
@@ -182,50 +188,58 @@ std::string PluginManager::GetLastDllError() {
 }
 
 bool PluginManager::LoadPlugin(std::string path) {
-    std::shared_ptr<Plugin> plugin = std::make_shared<Plugin>();
-    plugin->path = path;
+    if (!IsPluginLoaded(path)) {
+        std::shared_ptr<Plugin> plugin = std::make_shared<Plugin>();
+        plugin->path = path;
 
 #ifdef _WIN32
-    plugin->sharedLibHandle = LoadLibraryEx(path.c_str(), NULL, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+        plugin->sharedLibHandle =
+            LoadLibraryEx(path.c_str(), NULL, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
 #endif
 #if defined(__linux__) || defined(__APPLE__)
-    plugin->sharedLibHandle = (void*)dlopen(path.c_str(), RTLD_LAZY);
+        plugin->sharedLibHandle = (void*)dlopen(path.c_str(), RTLD_LAZY);
 #endif
 
-    if (!plugin->sharedLibHandle) {
-        // GetLastDllError();
-        return false;
+        if (!plugin->sharedLibHandle) {
+            last_error = "DLL error: " + GetLastDllError();
+            return false;
+        }
+
+        PluginDefinitions::meta_getplugininterfaceversion* pluginVersion =
+            GetDllFunction<PluginDefinitions::meta_getplugininterfaceversion>(
+                *plugin, "get_plugin_interface_version");
+
+        if (!pluginVersion || pluginVersion() != PLUGIN_INTERFACE_VERSION) {
+            // The plugin is not compatible with this version of Yuzu
+            last_error = "Plugin version " + std::to_string(pluginVersion()) +
+                         " is not compatible with Yuzu plugin version " __STRINGIFY(
+                             PLUGIN_INTERFACE_VERSION);
+            return false;
+        }
+
+        PluginDefinitions::meta_setup_plugin* setup =
+            GetDllFunction<PluginDefinitions::meta_setup_plugin>(*plugin, "startPlugin");
+
+        PluginDefinitions::meta_handle_main_loop* mainLoop =
+            GetDllFunction<PluginDefinitions::meta_handle_main_loop>(*plugin, "handleMainLoop");
+
+        if (!setup || !mainLoop) {
+            last_error = "The DLL lacks necessary functions to run";
+            return false;
+        }
+
+        loaded_plugins.insert(path);
+
+        plugin->system = &system;
+        plugin->hidAppletResource =
+            system.ServiceManager().GetService<Service::HID::Hid>("hid")->GetAppletResource();
+
+        setup(plugin.get());
+
+        plugins.push_back(plugin);
     }
 
-    PluginDefinitions::meta_getplugininterfaceversion* pluginVersion =
-        GetDllFunction<PluginDefinitions::meta_getplugininterfaceversion>(
-            *plugin, "get_plugin_interface_version");
-
-    if (!pluginVersion || pluginVersion() > PLUGIN_INTERFACE_VERSION) {
-        // The plugin is not compatible with this version of Yuzu
-        return false;
-    }
-
-    PluginDefinitions::meta_setup_plugin* setup =
-        GetDllFunction<PluginDefinitions::meta_setup_plugin>(*plugin, "startPlugin");
-
-    PluginDefinitions::meta_handle_main_loop* mainLoop =
-        GetDllFunction<PluginDefinitions::meta_handle_main_loop>(*plugin, "handleMainLoop");
-
-    if (!setup || !mainLoop) {
-        // Neccessary functions not avalible
-        return false;
-    }
-
-    loaded_plugins.insert(path);
-
-    plugin->system = &system;
-    plugin->hidAppletResource =
-        system.ServiceManager().GetService<Service::HID::Hid>("hid")->GetAppletResource();
-
-    setup(plugin.get());
-
-    plugins.push_back(plugin);
+    return true;
 }
 
 void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {

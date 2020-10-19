@@ -101,9 +101,26 @@ public:
 
     bool LoadPlugin(std::string path);
     void RemovePlugin(std::string path) {
-        loaded_plugins.erase(std::find(loaded_plugins.begin(), loaded_plugins.end(), path));
+        if (IsPluginLoaded(path)) {
+            loaded_plugins.erase(std::find(loaded_plugins.begin(), loaded_plugins.end(), path));
+        }
     }
-    const std::vector<std::string>& GetAllLoadedPlugins();
+    bool IsPluginLoaded(std::string path) {
+        return loaded_plugins.count(path);
+    }
+
+    const std::set<std::string>& GetAllLoadedPlugins() {
+        return loaded_plugins;
+    }
+
+    void SetPluginCallback(std::function<void()> func) {
+        plugin_list_update_callback = func;
+    }
+
+    std::string GetLastErrorString() {
+        return last_error;
+        last_error = "";
+    }
 
 private:
     std::string GetLastDllError();
@@ -135,6 +152,10 @@ private:
     std::vector<std::shared_ptr<Plugin>> plugins;
     std::set<std::string> loaded_plugins;
     std::vector<std::shared_ptr<Plugin>> temp_plugins_to_remove;
+
+    std::function<void()> plugin_list_update_callback;
+
+    std::string last_error;
 
     Core::Timing::CoreTiming& core_timing;
     Core::Memory::Memory& memory;
