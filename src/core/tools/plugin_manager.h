@@ -10,12 +10,14 @@
         func((void*)((PluginDefinitions::type*)address));
 
 #include <atomic>
+#include <condition_variable>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <set>
 #include <string>
+#include <thread>
 #include <vector>
 #include "common/common_types.h"
 
@@ -95,8 +97,6 @@ public:
     // Returns whether or not the plugin manager is active.
     bool IsActive() const;
 
-    void ProcessScript(std::shared_ptr<Plugin> plugin);
-    void ProcessScriptFromIdle();
     void ProcessScriptFromVsync();
 
     bool LoadPlugin(std::string path);
@@ -143,6 +143,8 @@ private:
 #endif
     }
 
+    void ProcessScript(std::shared_ptr<Plugin> plugin);
+
     void ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin);
 
     void PluginThreadExecuter(std::shared_ptr<Plugin> plugin);
@@ -153,7 +155,7 @@ private:
     std::set<std::string> loaded_plugins;
     std::vector<std::shared_ptr<Plugin>> temp_plugins_to_remove;
 
-    std::function<void()> plugin_list_update_callback;
+    std::function<void()> plugin_list_update_callback{nullptr};
 
     std::string last_error;
 

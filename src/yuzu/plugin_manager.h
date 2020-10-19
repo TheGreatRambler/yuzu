@@ -12,6 +12,7 @@ class QHBoxLayout;
 class QListWidget;
 class QVBoxLayout;
 class QPushButton;
+class QListWidgetItem;
 
 class PluginDialog : public QDialog {
     Q_OBJECT
@@ -25,7 +26,7 @@ private:
 
     void updateAvailablePlugins();
 
-    const QString plugins_path = QCoreApplication::applicationDirPath() + tr("/yuzu_plugins");
+    QString plugins_path;
 
     QListWidget* plugin_list;
     QFileSystemWatcher filesystem_watcher;

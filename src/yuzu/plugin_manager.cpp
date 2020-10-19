@@ -16,10 +16,11 @@
 #include "yuzu/uisettings.h"
 
 PluginDialog::PluginDialog(QWidget* parent) : QDialog(parent) {
+    plugins_path = QCoreApplication::applicationDirPath() + tr("/yuzu_plugins");
     setAttribute(Qt::WA_DeleteOnClose);
 
     Core::System::GetInstance().PluginManager().SetPluginCallback(
-        std::bind(&PluginDialog::updateAvailablePlugins, this, std::placeholders::_1));
+        std::bind(&PluginDialog::updateAvailablePlugins, this));
 
     plugin_list = new QListWidget(this);
     plugin_list->setObjectName(QStringLiteral("PluginList"));

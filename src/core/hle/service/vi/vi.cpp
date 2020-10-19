@@ -31,6 +31,7 @@
 #include "core/hle/service/vi/vi_s.h"
 #include "core/hle/service/vi/vi_u.h"
 #include "core/settings.h"
+#include "core/tools/plugin_manager.h"
 
 namespace Service::VI {
 
@@ -580,6 +581,9 @@ private:
             buffer_queue.QueueBuffer(request.data.slot, request.data.transform,
                                      request.data.GetCropRect(), request.data.swap_interval,
                                      request.data.multi_fence);
+
+            // The plugin manager counts vsync as when the game pushes a buffer onto the queue
+            Core::System::GetInstance().PluginManager().ProcessScriptFromVsync();
 
             IGBPQueueBufferResponseParcel response{1280, 720};
             ctx.WriteBuffer(response.Serialize());

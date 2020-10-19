@@ -40,11 +40,7 @@ core_timing.ScheduleEvent(MEMORY_FREEZER_TICKS, event);
 */
 }
 
-PluginManager::~PluginManager() {
-    /*
-    core_timing.UnscheduleEvent(event, 0);
-    */
-}
+PluginManager::~PluginManager() = 0;
 
 void PluginManager::SetActive(bool active) {
     if (!this->active.exchange(active)) {
@@ -77,56 +73,37 @@ void PluginManager::ProcessScript(std::shared_ptr<Plugin> plugin) {
         plugin->pluginCv.wait(
             lk, [plugin] { return plugin->processedMainLoop || plugin->encounteredVsync; });
 
-        if (plugin->hasStopped) {
-            // Need to remove this plugin permanently
-            plugin->pluginThread->join();
+        if (plugin->processedMainLoop.load(std::memory_order_relaxed) &&
+            loaded_plugins.find(plugin->path) == loaded_plugins.end()) {
+            plugin->hasStopped = true;
             temp_plugins_to_remove.push_back(plugin);
-        }
-
-        if (plugin->processedMainLoop.load(std::memory_order_relaxed)) {
-            // This main loop is done
-            plugin->processedMainLoop = false;
-            plugin->encounteredVsync = false;
-
-            if (loaded_plugins.find(plugin->path) == loaded_plugins.end()) {
-                plugin->hasStopped = true;
-            }
-        }
-    }
-}
-
-void PluginManager::ProcessScriptFromIdle() {
-    for (auto& plugin : plugins) {
-        if (!plugin->encounteredVsync.load(std::memory_order_relaxed)) {
-            // Create thread for every main loop function
-            plugin->encounteredVsync = false;
-            plugin->processedMainLoop = false;
-
-            if (!plugin->pluginThread->joinable()) {
-                // Start for first time
-                // If this plugin is disabled, the main loop has to be finshed, inform plugin
-                //     it must close somehow
-                plugin->pluginThread = std::make_unique<std::thread>(
-                    &PluginManager::PluginThreadExecuter, this, plugin);
-            }
-
-            ProcessScript(plugin);
         }
     }
 }
 
 void PluginManager::ProcessScriptFromVsync() {
+    temp_plugins_to_remove.clear();
+
     for (auto& plugin : plugins) {
+        if (!plugin->pluginThread->joinable()) {
+            plugin->pluginThread =
+                std::make_unique<std::thread>(&PluginManager::PluginThreadExecuter, this, plugin);
+        }
+
         if (plugin->encounteredVsync.load(std::memory_order_relaxed)) {
             // Continue thread from the vsync event
             plugin->encounteredVsync = false;
 
-            ProcessScript(plugin);
+            do {
+                ProcessScript(plugin);
+            } while (plugin->processedMainLoop.load(std::memory_order_relaxed) &&
+                     !plugin->hasStopped);
         }
     }
 
     for (auto& plugin : temp_plugins_to_remove) {
         GetDllFunction<PluginDefinitions::meta_handle_close>(*plugin, "onClose")();
+        plugin->pluginThread->join();
 
 #ifdef _WIN32
         FreeLibrary(plugin->sharedLibHandle);
@@ -162,6 +139,7 @@ void PluginManager::PluginThreadExecuter(std::shared_ptr<Plugin> plugin) {
         // Once the end of this function is reached, the main loop must have completed
         lk.unlock();
         plugin->processedMainLoop = true;
+        plugin->encounteredVsync = false;
         plugin->pluginCv.notify_one();
     }
 }
@@ -257,6 +235,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
 
         // Notify main thread a vsync event is now being waited for
         self->encounteredVsync = true;
+        self->encounteredVsync = false;
         self->pluginCv.notify_one();
 
         // Block until main thread has reached vsync
@@ -358,7 +337,6 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
     // clang-format off
     ADD_FUNCTION_TO_PLUGIN(emu_log, [](void* ctx,
         const char* logMessage, PluginDefinitions::LogLevel level) -> void {
-        Plugin* self = (Plugin*)ctx;
         // TODO send to correct channels
         switch (level) {
         case PluginDefinitions::LogLevel::Info:
@@ -375,6 +353,9 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             break;
         case PluginDefinitions::LogLevel::Error:
             LOG_ERROR(Plugin, logMessage);
+            break;
+        default:
+            LOG_INFO(Plugin, logMessage);
             break;
         }
     })
@@ -442,6 +423,9 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                     return handle.r_stick.x;
                 case PluginDefinitions::YuzuJoystickType::RightY:
                     return handle.r_stick.y;
+                default:
+                    UNREACHABLE();
+                    break;
             }
     })
     ADD_FUNCTION_TO_PLUGIN(joypad_setjoystick,
@@ -462,6 +446,9 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                     break;
                 case PluginDefinitions::YuzuJoystickType::RightY:
                     handle.r_stick.y = input;
+                    break;
+                default:
+                    UNREACHABLE();
                     break;
             }
     })
@@ -509,6 +496,9 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                     return handle.orientation[2].y;
                 case PluginDefinitions::SixAxisMotionTypes::DirectionZZ:
                     return handle.orientation[2].z;
+                default:
+                    UNREACHABLE();
+                    break;
             }
     })
     ADD_FUNCTION_TO_PLUGIN(joypad_setsixaxis,
@@ -572,6 +562,9 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 case PluginDefinitions::SixAxisMotionTypes::DirectionZZ:
                     handle.orientation[2].z = input;
                     break;
+                default:
+                    UNREACHABLE();
+                    break;
             }
     })
     ADD_FUNCTION_TO_PLUGIN(joypad_enablejoypad,
@@ -602,9 +595,6 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
     })
     ADD_FUNCTION_TO_PLUGIN(joypad_isjoypadconnected,
         [](void* ctx, PluginDefinitions::ControllerNumber player) -> uint8_t {
-            Plugin* self = (Plugin*)ctx;
-            Service::HID::Controller_NPad& npad =
-                self->hidAppletResource->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
             return Settings::values.players[(size_t) player].connected;
     })
     // clang-format on
