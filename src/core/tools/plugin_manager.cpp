@@ -40,7 +40,7 @@ core_timing.ScheduleEvent(MEMORY_FREEZER_TICKS, event);
 */
 }
 
-PluginManager::~PluginManager() = 0;
+PluginManager::~PluginManager() {}
 
 void PluginManager::SetActive(bool active) {
     if (!this->active.exchange(active)) {

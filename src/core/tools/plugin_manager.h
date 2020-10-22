@@ -163,5 +163,4 @@ private:
     Core::Memory::Memory& memory;
     Core::System& system;
 };
-
 } // namespace Tools
