@@ -19,19 +19,19 @@ enum class LogLevel : uint8_t {
 };
 
 enum class EnableInputType : uint16_t {
-    None = 0,
-    EnableController1 = BIT(0),
-    EnableController2 = BIT(1),
-    EnableController3 = BIT(2),
-    EnableController4 = BIT(3),
-    EnableController5 = BIT(4),
-    EnableController6 = BIT(5),
-    EnableController7 = BIT(6),
-    EnableController8 = BIT(7),
-    EnableControllerHandheld = BIT(8),
-    EnableTouchpad = BIT(9),
-    EnableMouseKeyboard = BIT(10),
-    All = BIT(11),
+    EnableController1 = 1,
+    EnableController2 = 2,
+    EnableController3 = 3,
+    EnableController4 = 4,
+    EnableController5 = 5,
+    EnableController6 = 6,
+    EnableController7 = 7,
+    EnableController8 = 8,
+    EnableControllerHandheld = 9,
+    EnableTouchscreen = 10,
+    EnableMouse = 11,
+    EnableKeyboard = 12,
+    All = 13,
 };
 
 enum class YuzuJoystickType : uint8_t {
@@ -296,12 +296,21 @@ enum class KeyboardModifiers : uint8_t {
     NumKeyboardMods,
 };
 
-enum class MouseButton : int32_t {
+enum class MouseButton : uint8_t {
     Left,
     Right,
     Middle,
     Forward,
     Back,
+};
+
+enum class MouseTypes : uint8_t {
+    X,
+    Y,
+    DeltaX,
+    DeltaY,
+    WheelX,
+    WheelY,
 };
 
 enum class TouchTypes : uint8_t {
@@ -443,6 +452,8 @@ typedef uint8_t(joypad_isjoypadconnected)(void* ctx, ControllerNumber player);
 // table input.read() ignored
 // string input.popup ignored
 
+typedef void(input_requeststateupdate)(void* ctx);
+
 typedef void(input_enablekeyboard)(void* ctx, uint8_t enable);
 typedef void(input_enablemouse)(void* ctx, uint8_t enable);
 typedef void(input_enabletouchscreen)(void* ctx, uint8_t enable);
@@ -459,12 +470,15 @@ typedef void(input_setmousepressed)(void* ctx, MouseButton button, uint8_t ispre
 typedef uint8_t(input_getnumtouches)(void* ctx);
 typedef void(input_setnumtouches)(void* ctx, uint8_t num);
 
-typedef int32_t(joypad_readtouch)(void* ctx, TouchTypes type);
-typedef void(joypad_settouch)(void* ctx, TouchTypes type, int32_t val);
+typedef uint32_t(joypad_readtouch)(void* ctx, uint8_t idx, TouchTypes type);
+typedef void(joypad_settouch)(void* ctx, uint8_t idx, TouchTypes type, uint32_t val);
+
+typedef void(joypad_movemouse)(void* ctx, MouseTypes type, int32_t val);
+typedef int32_t(joypad_readmouse)(void* ctx, MouseTypes type);
 
 // Enable certain kinds of input from Yuzu, all input types not explicitely enabled
 // Are set manually by the plugin
-typedef void(input_enableoutsideinput)(void* ctx, EnableInputType typeToEnable);
+typedef void(input_enableoutsideinput)(void* ctx, EnableInputType typetoenable, uint8_t enable);
 
 // Savestate Library implemented in dll
 

@@ -316,32 +316,27 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             return self->system->CurrentProcess()->PageTable().GetStackRegionSize();
         }
     })
-    // clang-format off
-    ADD_FUNCTION_TO_PLUGIN(emu_log, [](void* ctx,
-        const char* logMessage, PluginDefinitions::LogLevel level) -> void {
-        // TODO send to correct channels
-        switch (level) {
-        case PluginDefinitions::LogLevel::Info:
-            LOG_INFO(Plugin, logMessage);
-            break;
-        case PluginDefinitions::LogLevel::Critical:
-            LOG_CRITICAL(Plugin, logMessage);
-            break;
-        case PluginDefinitions::LogLevel::Debug:
-            LOG_DEBUG(Plugin, logMessage);
-            break;
-        case PluginDefinitions::LogLevel::Warning:
-            LOG_WARNING(Plugin, logMessage);
-            break;
-        case PluginDefinitions::LogLevel::Error:
-            LOG_ERROR(Plugin, logMessage);
-            break;
-        default:
-            LOG_INFO(Plugin, logMessage);
-            break;
-        }
-    })
-    // clang-format on
+    ADD_FUNCTION_TO_PLUGIN(
+        emu_log, [](void* ctx, const char* logMessage, PluginDefinitions::LogLevel level) -> void {
+            // TODO send to correct channels
+            switch (level) {
+            case PluginDefinitions::LogLevel::Info:
+                LOG_INFO(Plugin, logMessage);
+                break;
+            case PluginDefinitions::LogLevel::Critical:
+                LOG_CRITICAL(Plugin, logMessage);
+                break;
+            case PluginDefinitions::LogLevel::Debug:
+                LOG_DEBUG(Plugin, logMessage);
+                break;
+            case PluginDefinitions::LogLevel::Warning:
+                LOG_WARNING(Plugin, logMessage);
+                break;
+            case PluginDefinitions::LogLevel::Error:
+                LOG_ERROR(Plugin, logMessage);
+                break;
+            }
+        })
     ADD_FUNCTION_TO_PLUGIN(
         memory_readbyterange,
         [](void* ctx, uint64_t address, uint8_t* bytes, uint64_t length) -> uint8_t {
@@ -376,209 +371,505 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
         Plugin* self = (Plugin*)ctx;
         return self->system->CoreTiming().GetCPUTicks();
     })
-    // clang-format off
-    ADD_FUNCTION_TO_PLUGIN(joypad_read,
-        [](void* ctx, PluginDefinitions::ControllerNumber player) -> uint64_t {
+    ADD_FUNCTION_TO_PLUGIN(
+        joypad_read, [](void* ctx, PluginDefinitions::ControllerNumber player) -> uint64_t {
             Plugin* self = (Plugin*)ctx;
-            Service::HID::Controller_NPad& npad = self->hidAppletResource->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
-            return npad.GetRawHandle((uint32_t) player).pad_states.raw;
-    })
-    ADD_FUNCTION_TO_PLUGIN(joypad_set,
+            Service::HID::Controller_NPad& npad =
+                self->hidAppletResource->GetController<Service::HID::Controller_NPad>(
+                    Service::HID::HidController::NPad);
+            return npad.GetRawHandle((uint32_t)player).pad_states.raw;
+        })
+    ADD_FUNCTION_TO_PLUGIN(
+        joypad_set,
         [](void* ctx, PluginDefinitions::ControllerNumber player, uint64_t input) -> void {
             Plugin* self = (Plugin*)ctx;
-            Service::HID::Controller_NPad& npad = self->hidAppletResource->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
-            npad.GetRawHandle((uint32_t) player).pad_states.raw = input;
-    })
-    ADD_FUNCTION_TO_PLUGIN(joypad_readjoystick,
+            Service::HID::Controller_NPad& npad =
+                self->hidAppletResource->GetController<Service::HID::Controller_NPad>(
+                    Service::HID::HidController::NPad);
+            npad.GetRawHandle((uint32_t)player).pad_states.raw = input;
+        })
+    ADD_FUNCTION_TO_PLUGIN(
+        joypad_readjoystick,
         [](void* ctx, PluginDefinitions::ControllerNumber player,
-        PluginDefinitions::YuzuJoystickType type) -> int16_t {
+           PluginDefinitions::YuzuJoystickType type) -> int16_t {
             Plugin* self = (Plugin*)ctx;
-            Service::HID::Controller_NPad& npad = self->hidAppletResource->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
-            npad.RequestPadStateUpdate((uint32_t) player);
-            auto& handle = npad.GetRawHandle((uint32_t) player);
-            switch(type) {
-                case PluginDefinitions::YuzuJoystickType::LeftX:
-                    return handle.l_stick.x;
-                case PluginDefinitions::YuzuJoystickType::LeftY:
-                    return handle.l_stick.y;
-                case PluginDefinitions::YuzuJoystickType::RightX:
-                    return handle.r_stick.x;
-                case PluginDefinitions::YuzuJoystickType::RightY:
-                    return handle.r_stick.y;
-                default:
-                    UNREACHABLE();
-                    break;
+            Service::HID::Controller_NPad& npad =
+                self->hidAppletResource->GetController<Service::HID::Controller_NPad>(
+                    Service::HID::HidController::NPad);
+            npad.RequestPadStateUpdate((uint32_t)player);
+            auto& handle = npad.GetRawHandle((uint32_t)player);
+            switch (type) {
+            case PluginDefinitions::YuzuJoystickType::LeftX:
+                return handle.l_stick.x;
+            case PluginDefinitions::YuzuJoystickType::LeftY:
+                return handle.l_stick.y;
+            case PluginDefinitions::YuzuJoystickType::RightX:
+                return handle.r_stick.x;
+            case PluginDefinitions::YuzuJoystickType::RightY:
+                return handle.r_stick.y;
             }
-    })
-    ADD_FUNCTION_TO_PLUGIN(joypad_setjoystick,
+        })
+    ADD_FUNCTION_TO_PLUGIN(
+        joypad_setjoystick,
         [](void* ctx, PluginDefinitions::ControllerNumber player,
-        PluginDefinitions::YuzuJoystickType type, int16_t input) -> void {
+           PluginDefinitions::YuzuJoystickType type, int16_t input) -> void {
             Plugin* self = (Plugin*)ctx;
-            Service::HID::Controller_NPad& npad = self->hidAppletResource->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
-            auto& handle = npad.GetRawHandle((uint32_t) player);
-            switch(type) {
-                case PluginDefinitions::YuzuJoystickType::LeftX:
-                    handle.l_stick.x = input;
-                    break;
-                case PluginDefinitions::YuzuJoystickType::LeftY:
-                    handle.l_stick.y = input;
-                    break;
-                case PluginDefinitions::YuzuJoystickType::RightX:
-                    handle.r_stick.x = input;
-                    break;
-                case PluginDefinitions::YuzuJoystickType::RightY:
-                    handle.r_stick.y = input;
-                    break;
-                default:
-                    UNREACHABLE();
-                    break;
+            Service::HID::Controller_NPad& npad =
+                self->hidAppletResource->GetController<Service::HID::Controller_NPad>(
+                    Service::HID::HidController::NPad);
+            auto& handle = npad.GetRawHandle((uint32_t)player);
+            switch (type) {
+            case PluginDefinitions::YuzuJoystickType::LeftX:
+                handle.l_stick.x = input;
+                break;
+            case PluginDefinitions::YuzuJoystickType::LeftY:
+                handle.l_stick.y = input;
+                break;
+            case PluginDefinitions::YuzuJoystickType::RightX:
+                handle.r_stick.x = input;
+                break;
+            case PluginDefinitions::YuzuJoystickType::RightY:
+                handle.r_stick.y = input;
+                break;
             }
-    })
-    ADD_FUNCTION_TO_PLUGIN(joypad_readsixaxis,
+        })
+    ADD_FUNCTION_TO_PLUGIN(
+        joypad_readsixaxis,
         [](void* ctx, PluginDefinitions::ControllerNumber player,
-        PluginDefinitions::SixAxisMotionTypes type) -> float {
+           PluginDefinitions::SixAxisMotionTypes type) -> float {
             Plugin* self = (Plugin*)ctx;
-            Service::HID::Controller_NPad& npad = self->hidAppletResource->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
-            npad.RequestMotionUpdate((uint32_t) player);
-            auto& handle = npad.GetRawMotionHandle((uint32_t) player);
-            switch(type) {
-                case PluginDefinitions::SixAxisMotionTypes::AccelerationX:
-                    return handle.accel.x;
-                case PluginDefinitions::SixAxisMotionTypes::AccelerationY:
-                    return handle.accel.y;
-                case PluginDefinitions::SixAxisMotionTypes::AccelerationZ:
-                    return handle.accel.z;
-                case PluginDefinitions::SixAxisMotionTypes::AngularVelocityX:
-                    return handle.gyro.x;
-                case PluginDefinitions::SixAxisMotionTypes::AngularVelocityY:
-                    return handle.gyro.y;
-                case PluginDefinitions::SixAxisMotionTypes::AngularVelocityZ:
-                    return handle.gyro.z;
-                case PluginDefinitions::SixAxisMotionTypes::AngleX:
-                    return handle.rotation.x;
-                case PluginDefinitions::SixAxisMotionTypes::AngleY:
-                    return handle.rotation.y;
-                case PluginDefinitions::SixAxisMotionTypes::AngleZ:
-                    return handle.rotation.z;
-                case PluginDefinitions::SixAxisMotionTypes::DirectionXX:
-                    return handle.orientation[0].x;
-                case PluginDefinitions::SixAxisMotionTypes::DirectionXY:
-                    return handle.orientation[0].y;
-                case PluginDefinitions::SixAxisMotionTypes::DirectionXZ:
-                    return handle.orientation[0].z;
-                case PluginDefinitions::SixAxisMotionTypes::DirectionYX:
-                    return handle.orientation[1].x;
-                case PluginDefinitions::SixAxisMotionTypes::DirectionYY:
-                    return handle.orientation[1].y;
-                case PluginDefinitions::SixAxisMotionTypes::DirectionYZ:
-                    return handle.orientation[1].z;
-                case PluginDefinitions::SixAxisMotionTypes::DirectionZX:
-                    return handle.orientation[2].x;
-                case PluginDefinitions::SixAxisMotionTypes::DirectionZY:
-                    return handle.orientation[2].y;
-                case PluginDefinitions::SixAxisMotionTypes::DirectionZZ:
-                    return handle.orientation[2].z;
-                default:
-                    UNREACHABLE();
-                    break;
+            Service::HID::Controller_NPad& npad =
+                self->hidAppletResource->GetController<Service::HID::Controller_NPad>(
+                    Service::HID::HidController::NPad);
+            npad.RequestMotionUpdate((uint32_t)player);
+            auto& handle = npad.GetRawMotionHandle((uint32_t)player);
+            switch (type) {
+            case PluginDefinitions::SixAxisMotionTypes::AccelerationX:
+                return handle.accel.x;
+            case PluginDefinitions::SixAxisMotionTypes::AccelerationY:
+                return handle.accel.y;
+            case PluginDefinitions::SixAxisMotionTypes::AccelerationZ:
+                return handle.accel.z;
+            case PluginDefinitions::SixAxisMotionTypes::AngularVelocityX:
+                return handle.gyro.x;
+            case PluginDefinitions::SixAxisMotionTypes::AngularVelocityY:
+                return handle.gyro.y;
+            case PluginDefinitions::SixAxisMotionTypes::AngularVelocityZ:
+                return handle.gyro.z;
+            case PluginDefinitions::SixAxisMotionTypes::AngleX:
+                return handle.rotation.x;
+            case PluginDefinitions::SixAxisMotionTypes::AngleY:
+                return handle.rotation.y;
+            case PluginDefinitions::SixAxisMotionTypes::AngleZ:
+                return handle.rotation.z;
+            case PluginDefinitions::SixAxisMotionTypes::DirectionXX:
+                return handle.orientation[0].x;
+            case PluginDefinitions::SixAxisMotionTypes::DirectionXY:
+                return handle.orientation[0].y;
+            case PluginDefinitions::SixAxisMotionTypes::DirectionXZ:
+                return handle.orientation[0].z;
+            case PluginDefinitions::SixAxisMotionTypes::DirectionYX:
+                return handle.orientation[1].x;
+            case PluginDefinitions::SixAxisMotionTypes::DirectionYY:
+                return handle.orientation[1].y;
+            case PluginDefinitions::SixAxisMotionTypes::DirectionYZ:
+                return handle.orientation[1].z;
+            case PluginDefinitions::SixAxisMotionTypes::DirectionZX:
+                return handle.orientation[2].x;
+            case PluginDefinitions::SixAxisMotionTypes::DirectionZY:
+                return handle.orientation[2].y;
+            case PluginDefinitions::SixAxisMotionTypes::DirectionZZ:
+                return handle.orientation[2].z;
             }
-    })
-    ADD_FUNCTION_TO_PLUGIN(joypad_setsixaxis,
+        })
+    ADD_FUNCTION_TO_PLUGIN(
+        joypad_setsixaxis,
         [](void* ctx, PluginDefinitions::ControllerNumber player,
-        PluginDefinitions::SixAxisMotionTypes type, float input) -> void {
+           PluginDefinitions::SixAxisMotionTypes type, float input) -> void {
             Plugin* self = (Plugin*)ctx;
-            Service::HID::Controller_NPad& npad = self->hidAppletResource->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
-            auto& handle = npad.GetRawMotionHandle((uint32_t) player);
-            switch(type) {
-                case PluginDefinitions::SixAxisMotionTypes::AccelerationX:
-                    handle.accel.x = input;
-                    break;
-                case PluginDefinitions::SixAxisMotionTypes::AccelerationY:
-                    handle.accel.y = input;
-                    break;
-                case PluginDefinitions::SixAxisMotionTypes::AccelerationZ:
-                    handle.accel.z = input;
-                    break;
-                case PluginDefinitions::SixAxisMotionTypes::AngularVelocityX:
-                    handle.gyro.x = input;
-                    break;
-                case PluginDefinitions::SixAxisMotionTypes::AngularVelocityY:
-                    handle.gyro.y = input;
-                    break;
-                case PluginDefinitions::SixAxisMotionTypes::AngularVelocityZ:
-                    handle.gyro.z = input;
-                    break;
-                case PluginDefinitions::SixAxisMotionTypes::AngleX:
-                    handle.rotation.x = input;
-                    break;
-                case PluginDefinitions::SixAxisMotionTypes::AngleY:
-                    handle.rotation.y = input;
-                    break;
-                case PluginDefinitions::SixAxisMotionTypes::AngleZ:
-                    handle.rotation.z = input;
-                    break;
-                case PluginDefinitions::SixAxisMotionTypes::DirectionXX:
-                    handle.orientation[0].x = input;
-                    break;
-                case PluginDefinitions::SixAxisMotionTypes::DirectionXY:
-                    handle.orientation[0].y = input;
-                    break;
-                case PluginDefinitions::SixAxisMotionTypes::DirectionXZ:
-                    handle.orientation[0].z = input;
-                    break;
-                case PluginDefinitions::SixAxisMotionTypes::DirectionYX:
-                    handle.orientation[1].x = input;
-                    break;
-                case PluginDefinitions::SixAxisMotionTypes::DirectionYY:
-                    handle.orientation[1].y = input;
-                    break;
-                case PluginDefinitions::SixAxisMotionTypes::DirectionYZ:
-                    handle.orientation[1].z = input;
-                    break;
-                case PluginDefinitions::SixAxisMotionTypes::DirectionZX:
-                    handle.orientation[2].x = input;
-                    break;
-                case PluginDefinitions::SixAxisMotionTypes::DirectionZY:
-                    handle.orientation[2].y = input;
-                    break;
-                case PluginDefinitions::SixAxisMotionTypes::DirectionZZ:
-                    handle.orientation[2].z = input;
-                    break;
-                default:
-                    UNREACHABLE();
-                    break;
+            Service::HID::Controller_NPad& npad =
+                self->hidAppletResource->GetController<Service::HID::Controller_NPad>(
+                    Service::HID::HidController::NPad);
+            auto& handle = npad.GetRawMotionHandle((uint32_t)player);
+            switch (type) {
+            case PluginDefinitions::SixAxisMotionTypes::AccelerationX:
+                handle.accel.x = input;
+                break;
+            case PluginDefinitions::SixAxisMotionTypes::AccelerationY:
+                handle.accel.y = input;
+                break;
+            case PluginDefinitions::SixAxisMotionTypes::AccelerationZ:
+                handle.accel.z = input;
+                break;
+            case PluginDefinitions::SixAxisMotionTypes::AngularVelocityX:
+                handle.gyro.x = input;
+                break;
+            case PluginDefinitions::SixAxisMotionTypes::AngularVelocityY:
+                handle.gyro.y = input;
+                break;
+            case PluginDefinitions::SixAxisMotionTypes::AngularVelocityZ:
+                handle.gyro.z = input;
+                break;
+            case PluginDefinitions::SixAxisMotionTypes::AngleX:
+                handle.rotation.x = input;
+                break;
+            case PluginDefinitions::SixAxisMotionTypes::AngleY:
+                handle.rotation.y = input;
+                break;
+            case PluginDefinitions::SixAxisMotionTypes::AngleZ:
+                handle.rotation.z = input;
+                break;
+            case PluginDefinitions::SixAxisMotionTypes::DirectionXX:
+                handle.orientation[0].x = input;
+                break;
+            case PluginDefinitions::SixAxisMotionTypes::DirectionXY:
+                handle.orientation[0].y = input;
+                break;
+            case PluginDefinitions::SixAxisMotionTypes::DirectionXZ:
+                handle.orientation[0].z = input;
+                break;
+            case PluginDefinitions::SixAxisMotionTypes::DirectionYX:
+                handle.orientation[1].x = input;
+                break;
+            case PluginDefinitions::SixAxisMotionTypes::DirectionYY:
+                handle.orientation[1].y = input;
+                break;
+            case PluginDefinitions::SixAxisMotionTypes::DirectionYZ:
+                handle.orientation[1].z = input;
+                break;
+            case PluginDefinitions::SixAxisMotionTypes::DirectionZX:
+                handle.orientation[2].x = input;
+                break;
+            case PluginDefinitions::SixAxisMotionTypes::DirectionZY:
+                handle.orientation[2].y = input;
+                break;
+            case PluginDefinitions::SixAxisMotionTypes::DirectionZZ:
+                handle.orientation[2].z = input;
+                break;
             }
-    })
-    ADD_FUNCTION_TO_PLUGIN(joypad_enablejoypad,
+        })
+    ADD_FUNCTION_TO_PLUGIN(
+        joypad_enablejoypad,
         [](void* ctx, PluginDefinitions::ControllerNumber player, uint8_t enable) -> void {
             Plugin* self = (Plugin*)ctx;
             Service::HID::Controller_NPad& npad =
-                self->hidAppletResource->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
-            size_t index = (size_t) player;
+                self->hidAppletResource->GetController<Service::HID::Controller_NPad>(
+                    Service::HID::HidController::NPad);
+            size_t index = (size_t)player;
             auto type = npad.MapSettingsTypeToNPad(Settings::values.players[index].controller_type);
-            npad.UpdateControllerAt(type, (size_t) player, enable);
+            npad.UpdateControllerAt(type, (size_t)player, enable);
+        })
+    ADD_FUNCTION_TO_PLUGIN(joypad_removealljoypads, [](void* ctx) -> void {
+        Plugin* self = (Plugin*)ctx;
+        Service::HID::Controller_NPad& npad =
+            self->hidAppletResource->GetController<Service::HID::Controller_NPad>(
+                Service::HID::HidController::NPad);
+        npad.DisconnectAllConnectedControllers();
     })
-    ADD_FUNCTION_TO_PLUGIN(joypad_removealljoypads,
-        [](void* ctx) -> void {
+    ADD_FUNCTION_TO_PLUGIN(
+        joypad_setjoypadtype,
+        [](void* ctx, PluginDefinitions::ControllerNumber player,
+           PluginDefinitions::ControllerType type) -> void {
             Plugin* self = (Plugin*)ctx;
             Service::HID::Controller_NPad& npad =
-                self->hidAppletResource->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
-            npad.DisconnectAllConnectedControllers();
-    })
-    ADD_FUNCTION_TO_PLUGIN(joypad_setjoypadtype,
-        [](void* ctx, PluginDefinitions::ControllerNumber player, PluginDefinitions::ControllerType type) -> void {
-            Plugin* self = (Plugin*)ctx;
-            Service::HID::Controller_NPad& npad =
-                self->hidAppletResource->GetController<Service::HID::Controller_NPad>(Service::HID::HidController::NPad);
-            size_t index = (size_t) player;
+                self->hidAppletResource->GetController<Service::HID::Controller_NPad>(
+                    Service::HID::HidController::NPad);
+            size_t index = (size_t)player;
             using NpadType = Service::HID::Controller_NPad::NPadControllerType;
-            npad.UpdateControllerAt((NpadType) type, index,
-                Settings::values.players[index].connected);
-    })
+            npad.UpdateControllerAt((NpadType)type, index,
+                                    Settings::values.players[index].connected);
+        })
     ADD_FUNCTION_TO_PLUGIN(joypad_isjoypadconnected,
-        [](void* ctx, PluginDefinitions::ControllerNumber player) -> uint8_t {
-            return Settings::values.players[(size_t) player].connected;
+                           [](void* ctx, PluginDefinitions::ControllerNumber player) -> uint8_t {
+                               return Settings::values.players[(size_t)player].connected;
+                           })
+    ADD_FUNCTION_TO_PLUGIN(input_requeststateupdate, [](void* ctx) -> void {
+        Plugin* self = (Plugin*)ctx;
+        Service::HID::Controller_NPad& npad =
+            self->hidAppletResource->GetController<Service::HID::Controller_NPad>(
+                Service::HID::HidController::NPad);
+        for (uint32_t joypad = 0; joypad < Settings::values.players.size(); joypad++) {
+            if (Settings::values.players[joypad].connected) {
+                npad.RequestPadStateUpdate(joypad);
+                npad.RequestMotionUpdate(joypad);
+            }
+        }
+        Service::HID::Controller_Keyboard& keyboard =
+            self->hidAppletResource->GetController<Service::HID::Controller_Keyboard>(
+                Service::HID::HidController::Keyboard);
+        keyboard.RequestKeyboardStateUpdate();
+        Service::HID::Controller_Touchscreen& touchscreen =
+            self->hidAppletResource->GetController<Service::HID::Controller_Touchscreen>(
+                Service::HID::HidController::Touchscreen);
+        touchscreen.RequestTouchscreenStateUpdate(self->system->CoreTiming());
+        Service::HID::Controller_Mouse& mouse =
+            self->hidAppletResource->GetController<Service::HID::Controller_Mouse>(
+                Service::HID::HidController::Mouse);
+        mouse.RequestMouseStateUpdate();
     })
-    // clang-format on
+    ADD_FUNCTION_TO_PLUGIN(input_enablekeyboard, [](void* ctx, uint8_t enable) -> void {
+        Settings::values.keyboard_enabled = enable;
+    })
+    ADD_FUNCTION_TO_PLUGIN(input_enablemouse, [](void* ctx, uint8_t enable) -> void {
+        Settings::values.mouse_enabled = enable;
+    })
+    ADD_FUNCTION_TO_PLUGIN(input_enabletouchscreen, [](void* ctx, uint8_t enable) -> void {
+        Settings::values.touchscreen.enabled = enable;
+    })
+    ADD_FUNCTION_TO_PLUGIN(
+        input_iskeypressed, [](void* ctx, PluginDefinitions::KeyboardValues key) -> uint8_t {
+            Plugin* self = (Plugin*)ctx;
+            uint8_t corrected_key = (uint8_t)key;
+            Service::HID::Controller_Keyboard& keyboard =
+                self->hidAppletResource->GetController<Service::HID::Controller_Keyboard>(
+                    Service::HID::HidController::Keyboard);
+            auto& handle = keyboard.GetRawHandle();
+            return handle.key[corrected_key / 8] & (1ULL << (corrected_key % 8));
+        })
+    ADD_FUNCTION_TO_PLUGIN(
+        input_setkeypressed,
+        [](void* ctx, PluginDefinitions::KeyboardValues key, uint8_t ispressed) -> void {
+            Plugin* self = (Plugin*)ctx;
+            uint8_t corrected_key = (uint8_t)key;
+            Service::HID::Controller_Keyboard& keyboard =
+                self->hidAppletResource->GetController<Service::HID::Controller_Keyboard>(
+                    Service::HID::HidController::Keyboard);
+            auto& handle = keyboard.GetRawHandle();
+            if (ispressed) {
+                handle.key[corrected_key / 8] |= (1ULL << (corrected_key % 8));
+            } else {
+                handle.key[corrected_key / 8] &= ~(1ULL << (corrected_key % 8));
+            }
+        })
+    ADD_FUNCTION_TO_PLUGIN(
+        input_iskeymodifierpressed,
+        [](void* ctx, PluginDefinitions::KeyboardModifiers modifier) -> uint8_t {
+            Plugin* self = (Plugin*)ctx;
+            uint8_t corrected_modifier = (uint8_t)modifier;
+            Service::HID::Controller_Keyboard& keyboard =
+                self->hidAppletResource->GetController<Service::HID::Controller_Keyboard>(
+                    Service::HID::HidController::Keyboard);
+            auto& handle = keyboard.GetRawHandle();
+            return handle.modifier & BIT(corrected_modifier);
+        })
+    ADD_FUNCTION_TO_PLUGIN(
+        input_setkeymodifierpressed,
+        [](void* ctx, PluginDefinitions::KeyboardModifiers modifier, uint8_t ispressed) -> void {
+            Plugin* self = (Plugin*)ctx;
+            uint8_t corrected_modifier = (uint8_t)modifier;
+            Service::HID::Controller_Keyboard& keyboard =
+                self->hidAppletResource->GetController<Service::HID::Controller_Keyboard>(
+                    Service::HID::HidController::Keyboard);
+            auto& handle = keyboard.GetRawHandle();
+            if (ispressed) {
+                handle.modifier |= BIT(corrected_modifier);
+            } else {
+                handle.modifier &= ~BIT(corrected_modifier);
+            }
+        })
+    ADD_FUNCTION_TO_PLUGIN(
+        input_ismousepressed, [](void* ctx, PluginDefinitions::MouseButton button) -> uint8_t {
+            Plugin* self = (Plugin*)ctx;
+            uint8_t corrected_button = (uint8_t)button;
+            Service::HID::Controller_Mouse& mouse =
+                self->hidAppletResource->GetController<Service::HID::Controller_Mouse>(
+                    Service::HID::HidController::Mouse);
+            auto& handle = mouse.GetRawHandle();
+            return handle.button & BIT(corrected_button);
+        })
+    ADD_FUNCTION_TO_PLUGIN(
+        input_setmousepressed,
+        [](void* ctx, PluginDefinitions::MouseButton button, uint8_t ispressed) -> void {
+            Plugin* self = (Plugin*)ctx;
+            uint8_t corrected_button = (uint8_t)button;
+            Service::HID::Controller_Mouse& mouse =
+                self->hidAppletResource->GetController<Service::HID::Controller_Mouse>(
+                    Service::HID::HidController::Mouse);
+            auto& handle = mouse.GetRawHandle();
+            if (ispressed) {
+                handle.button |= BIT(corrected_button);
+            } else {
+                handle.button &= ~BIT(corrected_button);
+            }
+        })
+    ADD_FUNCTION_TO_PLUGIN(input_getnumtouches, [](void* ctx) -> uint8_t {
+        Plugin* self = (Plugin*)ctx;
+        Service::HID::Controller_Touchscreen& touchscreen =
+            self->hidAppletResource->GetController<Service::HID::Controller_Touchscreen>(
+                Service::HID::HidController::Touchscreen);
+        auto& handle = touchscreen.GetRawHandle();
+        return handle.entry_count;
+    })
+    ADD_FUNCTION_TO_PLUGIN(input_setnumtouches, [](void* ctx, uint8_t num) -> void {
+        Plugin* self = (Plugin*)ctx;
+        Service::HID::Controller_Touchscreen& touchscreen =
+            self->hidAppletResource->GetController<Service::HID::Controller_Touchscreen>(
+                Service::HID::HidController::Touchscreen);
+        auto& handle = touchscreen.GetRawHandle();
+        handle.entry_count = num;
+    })
+    ADD_FUNCTION_TO_PLUGIN(
+        joypad_readtouch,
+        [](void* ctx, uint8_t idx, PluginDefinitions::TouchTypes type) -> uint32_t {
+            Plugin* self = (Plugin*)ctx;
+            Service::HID::Controller_Touchscreen& touchscreen =
+                self->hidAppletResource->GetController<Service::HID::Controller_Touchscreen>(
+                    Service::HID::HidController::Touchscreen);
+            auto& handle = touchscreen.GetRawHandle().states[idx];
+            switch (type) {
+            case PluginDefinitions::TouchTypes::X:
+                return handle.x;
+            case PluginDefinitions::TouchTypes::Y:
+                return handle.y;
+            case PluginDefinitions::TouchTypes::DiameterX:
+                return handle.diameter_x;
+            case PluginDefinitions::TouchTypes::DiameterY:
+                return handle.diameter_y;
+            case PluginDefinitions::TouchTypes::RotationAngle:
+                return handle.rotation_angle;
+            }
+        })
+    ADD_FUNCTION_TO_PLUGIN(
+        joypad_settouch,
+        [](void* ctx, uint8_t idx, PluginDefinitions::TouchTypes type, uint32_t val) -> void {
+            Plugin* self = (Plugin*)ctx;
+            Service::HID::Controller_Touchscreen& touchscreen =
+                self->hidAppletResource->GetController<Service::HID::Controller_Touchscreen>(
+                    Service::HID::HidController::Touchscreen);
+            auto& handle = touchscreen.GetRawHandle().states[idx];
+            switch (type) {
+            case PluginDefinitions::TouchTypes::X:
+                handle.x = val;
+                break;
+            case PluginDefinitions::TouchTypes::Y:
+                handle.y = val;
+                break;
+            case PluginDefinitions::TouchTypes::DiameterX:
+                handle.diameter_x = val;
+                break;
+            case PluginDefinitions::TouchTypes::DiameterY:
+                handle.diameter_y = val;
+                break;
+            case PluginDefinitions::TouchTypes::RotationAngle:
+                handle.rotation_angle = val;
+                break;
+            }
+        })
+    ADD_FUNCTION_TO_PLUGIN(
+        joypad_movemouse, [](void* ctx, PluginDefinitions::MouseTypes type, int32_t val) -> void {
+            Plugin* self = (Plugin*)ctx;
+            Service::HID::Controller_Mouse& mouse =
+                self->hidAppletResource->GetController<Service::HID::Controller_Mouse>(
+                    Service::HID::HidController::Mouse);
+            auto& handle = mouse.GetRawHandle();
+            switch (type) {
+            case PluginDefinitions::MouseTypes::X:
+                handle.x = val;
+                break;
+            case PluginDefinitions::MouseTypes::Y:
+                handle.y = val;
+                break;
+            case PluginDefinitions::MouseTypes::DeltaX:
+                handle.delta_x = val;
+                break;
+            case PluginDefinitions::MouseTypes::DeltaY:
+                handle.delta_y = val;
+                break;
+            case PluginDefinitions::MouseTypes::WheelX:
+                handle.mouse_wheel_x = val;
+                break;
+            case PluginDefinitions::MouseTypes::WheelY:
+                handle.mouse_wheel_y = val;
+                break;
+            }
+        })
+    ADD_FUNCTION_TO_PLUGIN(
+        joypad_readmouse, [](void* ctx, PluginDefinitions::MouseTypes type) -> int32_t {
+            Plugin* self = (Plugin*)ctx;
+            Service::HID::Controller_Mouse& mouse =
+                self->hidAppletResource->GetController<Service::HID::Controller_Mouse>(
+                    Service::HID::HidController::Mouse);
+            auto& handle = mouse.GetRawHandle();
+            switch (type) {
+            case PluginDefinitions::MouseTypes::X:
+                return handle.x;
+            case PluginDefinitions::MouseTypes::Y:
+                return handle.y;
+            case PluginDefinitions::MouseTypes::DeltaX:
+                return handle.delta_x;
+            case PluginDefinitions::MouseTypes::DeltaY:
+                return handle.delta_y;
+            case PluginDefinitions::MouseTypes::WheelX:
+                return handle.mouse_wheel_x;
+            case PluginDefinitions::MouseTypes::WheelY:
+                return handle.mouse_wheel_y;
+            }
+        })
+    ADD_FUNCTION_TO_PLUGIN(
+        input_enableoutsideinput,
+        [](void* ctx, PluginDefinitions::EnableInputType typetoenable, uint8_t enable) -> void {
+            Plugin* self = (Plugin*)ctx;
+
+            Service::HID::Controller_NPad& npad =
+                self->hidAppletResource->GetController<Service::HID::Controller_NPad>(
+                    Service::HID::HidController::NPad);
+            Service::HID::Controller_Keyboard& keyboard =
+                self->hidAppletResource->GetController<Service::HID::Controller_Keyboard>(
+                    Service::HID::HidController::Keyboard);
+            Service::HID::Controller_Touchscreen& touchscreen =
+                self->hidAppletResource->GetController<Service::HID::Controller_Touchscreen>(
+                    Service::HID::HidController::Touchscreen);
+            Service::HID::Controller_Mouse& mouse =
+                self->hidAppletResource->GetController<Service::HID::Controller_Mouse>(
+                    Service::HID::HidController::Mouse);
+
+            if (typetoenable == PluginDefinitions::EnableInputType::All) {
+                for (uint32_t joypad = 0; joypad < Settings::values.players.size(); joypad++) {
+                    npad.EnableOutsideInput(joypad, enable);
+                }
+                keyboard.EnableOutsideInput(enable);
+                touchscreen.EnableOutsideInput(enable);
+                mouse.EnableOutsideInput(enable);
+            } else {
+                switch (typetoenable) {
+                case PluginDefinitions::EnableInputType::EnableController1:
+                    npad.EnableOutsideInput(0, enable);
+                    break;
+                case PluginDefinitions::EnableInputType::EnableController2:
+                    npad.EnableOutsideInput(1, enable);
+                    break;
+                case PluginDefinitions::EnableInputType::EnableController3:
+                    npad.EnableOutsideInput(2, enable);
+                    break;
+                case PluginDefinitions::EnableInputType::EnableController4:
+                    npad.EnableOutsideInput(3, enable);
+                    break;
+                case PluginDefinitions::EnableInputType::EnableController5:
+                    npad.EnableOutsideInput(4, enable);
+                    break;
+                case PluginDefinitions::EnableInputType::EnableController6:
+                    npad.EnableOutsideInput(5, enable);
+                    break;
+                case PluginDefinitions::EnableInputType::EnableController7:
+                    npad.EnableOutsideInput(6, enable);
+                    break;
+                case PluginDefinitions::EnableInputType::EnableController8:
+                    npad.EnableOutsideInput(7, enable);
+                    break;
+                case PluginDefinitions::EnableInputType::EnableControllerHandheld:
+                    npad.EnableOutsideInput(8, enable);
+                    break;
+                case PluginDefinitions::EnableInputType::EnableKeyboard:
+                    keyboard.EnableOutsideInput(enable);
+                    break;
+                case PluginDefinitions::EnableInputType::EnableMouse:
+                    mouse.EnableOutsideInput(enable);
+                    break;
+                case PluginDefinitions::EnableInputType::EnableTouchscreen:
+                    touchscreen.EnableOutsideInput(enable);
+                    break;
+                }
+            }
+        })
 }
 } // namespace Tools

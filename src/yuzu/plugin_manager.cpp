@@ -59,7 +59,7 @@ void PluginDialog::SignalClose() {
 
 void PluginDialog::pluginEnabledOrDisabled(QListWidgetItem* changed) {
     bool checked = changed->checkState() == Qt::Checked;
-    std::string path = QString(changed->text() + plugins_path).toStdString();
+    std::string path = QString(plugins_path + changed->text()).toStdString();
 
     if (checked) {
         Core::System::GetInstance().PluginManager().LoadPlugin(path);
