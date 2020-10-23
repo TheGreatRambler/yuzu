@@ -21,6 +21,8 @@ public:
     explicit PluginDialog(QWidget* parent);
     ~PluginDialog() override;
 
+    void SignalClose();
+
 private:
     void pluginEnabledOrDisabled(QListWidgetItem* changed);
 
@@ -29,6 +31,7 @@ private:
     QString plugins_path;
 
     QListWidget* plugin_list;
+    QPushButton* refresh_button;
     QFileSystemWatcher filesystem_watcher;
 
     QVBoxLayout* main_layout;

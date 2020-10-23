@@ -87,8 +87,7 @@ struct Plugin {
  */
 class PluginManager {
 public:
-    explicit PluginManager(Core::Timing::CoreTiming& core_timing_, Core::Memory::Memory& memory_,
-                           Core::System& system_);
+    explicit PluginManager(Core::System& system_);
     ~PluginManager();
 
     // Enables or disables the entire plugin manager.
@@ -159,8 +158,8 @@ private:
 
     std::string last_error;
 
+    Core::System& system;
     Core::Timing::CoreTiming& core_timing;
     Core::Memory::Memory& memory;
-    Core::System& system;
 };
 } // namespace Tools

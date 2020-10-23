@@ -122,7 +122,7 @@ FileSys::VirtualFile GetGameFileFromPath(const FileSys::VirtualFilesystem& vfs,
 struct System::Impl {
     explicit Impl(System& system)
         : kernel{system}, fs_controller{system}, memory{system},
-          cpu_manager{system}, reporter{system}, applet_manager{system} {}
+          cpu_manager{system}, reporter{system}, plugin_manager{system}, applet_manager{system} {}
 
     ResultStatus Run() {
         status = ResultStatus::Success;
@@ -189,8 +189,6 @@ struct System::Impl {
         if (!gpu_core) {
             return ResultStatus::ErrorVideoCore;
         }
-
-        plugin_manager = std::make_unique<Tools::PluginManager>(core_timing, memory, system);
 
         is_powered_on = true;
         exit_lock = false;
@@ -379,7 +377,7 @@ struct System::Impl {
     Reporter reporter;
     std::unique_ptr<Memory::CheatEngine> cheat_engine;
     std::unique_ptr<Tools::Freezer> memory_freezer;
-    std::unique_ptr<Tools::PluginManager> plugin_manager;
+    Tools::PluginManager plugin_manager;
     std::array<u8, 0x20> build_id{};
 
     /// Frontend applets
@@ -618,11 +616,11 @@ const Core::FrameLimiter& System::FrameLimiter() const {
 }
 
 Tools::PluginManager& System::PluginManager() {
-    return *impl->plugin_manager;
+    return impl->plugin_manager;
 }
 
 const Tools::PluginManager& System::PluginManager() const {
-    return *impl->plugin_manager;
+    return impl->plugin_manager;
 }
 
 Loader::ResultStatus System::GetGameName(std::string& out) const {

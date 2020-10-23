@@ -2364,6 +2364,7 @@ void GMainWindow::OnOpenYuzuFolder() {
 void GMainWindow::OnOpenPluginManager() {
     PluginDialog pluginDialog(this);
     pluginDialog.exec();
+    pluginDialog.SignalClose();
 }
 
 void GMainWindow::OnAbout() {

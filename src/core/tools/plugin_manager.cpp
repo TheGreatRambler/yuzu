@@ -28,31 +28,14 @@
 #include "core/tools/plugin_manager.h"
 
 namespace Tools {
-PluginManager::PluginManager(Core::Timing::CoreTiming& core_timing_, Core::Memory::Memory& memory_,
-                             Core::System& system_)
-    : core_timing{core_timing_}, memory{memory_}, system{system_} {
-    /*
-event = Core::Timing::CreateEvent(
-    "MemoryFreezer::FrameCallback",
-    [this](u64 userdata, s64 ns_late) { FrameCallback(userdata, ns_late); });
-
-core_timing.ScheduleEvent(MEMORY_FREEZER_TICKS, event);
-*/
-}
+PluginManager::PluginManager(Core::System& system_)
+    : system{system_}, core_timing{system.CoreTiming()}, memory{system.Memory()} {}
 
 PluginManager::~PluginManager() {}
 
 void PluginManager::SetActive(bool active) {
     if (!this->active.exchange(active)) {
-        /*
-        FillEntryReads();
-        core_timing.ScheduleEvent(MEMORY_FREEZER_TICKS, event);
-        LOG_DEBUG(Common_Memory, "Memory freezer activated!");
-        */
-    } else {
-        /*
-        LOG_DEBUG(Common_Memory, "Memory freezer deactivated!");
-        */
+        loaded_plugins.clear();
     }
 }
 
@@ -190,8 +173,8 @@ bool PluginManager::LoadPlugin(std::string path) {
         if (!pluginVersion || pluginVersion() != PLUGIN_INTERFACE_VERSION) {
             // The plugin is not compatible with this version of Yuzu
             last_error = "Plugin version " + std::to_string(pluginVersion()) +
-                         " is not compatible with Yuzu plugin version " __STRINGIFY(
-                             PLUGIN_INTERFACE_VERSION);
+                         " is not compatible with Yuzu plugin version " +
+                         std::to_string(PLUGIN_INTERFACE_VERSION);
             return false;
         }
 
@@ -254,7 +237,6 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
         Plugin* self = (Plugin*)ctx;
         self->system->Run();
     })
-    // ADD_FUNCTION_TO_PLUGIN(emu_message)
     // ADD_FUNCTION_TO_PLUGIN(emu_framecount)
     ADD_FUNCTION_TO_PLUGIN(emu_emulating, [](void* ctx) -> uint8_t {
         Plugin* self = (Plugin*)ctx;
