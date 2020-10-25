@@ -6,6 +6,9 @@
 #define __STRINGIFY(s) #s
 #endif
 
+#include <QPainter>
+#include <QPixmap>
+
 #include "common/assert.h"
 #include "common/logging/log.h"
 #include "core/core.h"
@@ -21,11 +24,13 @@
 #include "core/hle/service/hid/controllers/touchscreen.h"
 #include "core/hle/service/hid/hid.h"
 #include "core/hle/service/sm/sm.h"
+#include "core/hle/service/vi/vi.h"
 #include "core/loader/loader.h"
 #include "core/memory.h"
 #include "core/settings.h"
 #include "core/tools/plugin_definitions.h"
 #include "core/tools/plugin_manager.h"
+#include "video_core/renderer_base.h"
 
 namespace Tools {
 PluginManager::PluginManager(Core::System& system_)
@@ -201,6 +206,25 @@ bool PluginManager::LoadPlugin(std::string path) {
     }
 
     return true;
+}
+
+void PluginManager::RegenerateGuiRendererIfNeeded() {
+    LastDockedState thisDockedState =
+        Settings::values.use_docked_mode ? LastDockedState::Docked : LastDockedState::Undocked;
+    if (lastDockedState == LastDockedState::Neither || lastDockedState != thisDockedState) {
+        lastDockedState = thisDockedState;
+        delete guiPixmap;
+        delete guiPainter;
+        if (Settings::values.use_docked_mode) {
+            guiPixmap = new QPixmap((int)Service::VI::DisplayResolution::DockedWidth,
+                                    (int)Service::VI::DisplayResolution::DockedHeight);
+        } else {
+            guiPixmap = new QPixmap((int)Service::VI::DisplayResolution::UndockedWidth,
+                                    (int)Service::VI::DisplayResolution::UndockedHeight);
+        }
+        guiPainter = new QPainter(guiPixmap);
+        // TODO render over main screen with setPixmap, maybe in some update loop
+    }
 }
 
 void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
@@ -828,8 +852,8 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                     npad.EnableOutsideInput(joypad, enable);
                 }
                 keyboard.EnableOutsideInput(enable);
-                touchscreen.EnableOutsideInput(enable);
                 mouse.EnableOutsideInput(enable);
+                touchscreen.EnableOutsideInput(enable);
             } else {
                 switch (typetoenable) {
                 case PluginDefinitions::EnableInputType::EnableController1:

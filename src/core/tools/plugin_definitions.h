@@ -486,8 +486,11 @@ typedef void(input_enableoutsideinput)(void* ctx, EnableInputType typetoenable, 
 
 // GUI Library (Most functions handled DLL side, even text handling)
 
-typedef void(gui_drawpixel)(void* ctx, int x, int y, uint8_t alpha, uint8_t red, uint8_t green,
-                            uint8_t blue);
+typedef uint16_t(gui_getwidth)(void* ctx);
+typedef uint16_t(gui_getheight)(void* ctx);
+typedef void(gui_clearscreen)(void* ctx);
+typedef void(gui_drawpixel)(void* ctx, int x, int y, uint8_t red, uint8_t green, uint8_t blue,
+                            uint8_t alpha);
 // gui.getpixel(int x, int y) ignored
 // gui.box(int x1, int y1, int x2, int y2 [, fillcolor [, outlinecolor]]))
 // gui.drawbox(int x1, int y1, int x2, int y2 [, fillcolor [, outlinecolor]]))
@@ -496,7 +499,6 @@ typedef void(gui_drawpixel)(void* ctx, int x, int y, uint8_t alpha, uint8_t red,
 // gui.text(int x, int y, string str [, textcolor [, backcolor]])
 // gui.drawtext(int x, int y, string str [, textcolor [, backcolor]])
 // gui.parsecolor(color) ignored
-typedef char*(gui_savescreenshot)(void* ctx);
 typedef void(gui_savescreenshotas)(void* ctx, const char* path);
 typedef void(gui_drawimage)(void* ctx, int dx, int dy, const char* path, int sx, int sy, int sw,
                             int sh, float alphamul);

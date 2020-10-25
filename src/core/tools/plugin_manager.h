@@ -29,6 +29,9 @@
 #include <dlfcn.h>
 #endif
 
+class QPixmap;
+class QPainter;
+
 namespace Core::Timing {
 class CoreTiming;
 struct EventType;
@@ -121,7 +124,17 @@ public:
         last_error = "";
     }
 
+    QPixmap* GetPluginRender() {
+        return guiPixmap;
+    }
+
 private:
+    enum LastDockedState : uint8_t {
+        Neither,
+        Docked,
+        Undocked,
+    };
+
     std::string GetLastDllError();
 
     static char* GetAllocatedString(std::string& str) {
@@ -148,6 +161,8 @@ private:
 
     void PluginThreadExecuter(std::shared_ptr<Plugin> plugin);
 
+    void RegenerateGuiRendererIfNeeded();
+
     std::atomic_bool active{false};
 
     std::vector<std::shared_ptr<Plugin>> plugins;
@@ -157,6 +172,10 @@ private:
     std::function<void()> plugin_list_update_callback{nullptr};
 
     std::string last_error;
+
+    LastDockedState lastDockedState{LastDockedState::Neither};
+    QPixmap* guiPixmap;
+    QPainter* guiPainter;
 
     Core::System& system;
     Core::Timing::CoreTiming& core_timing;
