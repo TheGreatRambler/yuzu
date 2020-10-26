@@ -124,9 +124,23 @@ public:
         last_error = "";
     }
 
-    QPixmap* GetPluginRender() {
-        return guiPixmap;
+    void SetRenderCallback(std::function<void(const QPixmap& pixmap)> callback) {
+        render_callback = callback;
     }
+
+    void SetScreenshotCallback(std::function<QPixmap()> callback) {
+        screenshot_callback = callback;
+    }
+
+    void RegenerateGuiRendererIfNeeded();
+    void RenderGui() {
+        if (render_callback) {
+            render_callback(*guiPixmap);
+        }
+    }
+
+    QPainter* guiPainter;
+    std::function<QPixmap()> screenshot_callback;
 
 private:
     enum LastDockedState : uint8_t {
@@ -161,8 +175,6 @@ private:
 
     void PluginThreadExecuter(std::shared_ptr<Plugin> plugin);
 
-    void RegenerateGuiRendererIfNeeded();
-
     std::atomic_bool active{false};
 
     std::vector<std::shared_ptr<Plugin>> plugins;
@@ -175,7 +187,7 @@ private:
 
     LastDockedState lastDockedState{LastDockedState::Neither};
     QPixmap* guiPixmap;
-    QPainter* guiPainter;
+    std::function<void(const QPixmap& pixmap)> render_callback;
 
     Core::System& system;
     Core::Timing::CoreTiming& core_timing;

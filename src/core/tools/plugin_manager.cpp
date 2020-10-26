@@ -6,8 +6,11 @@
 #define __STRINGIFY(s) #s
 #endif
 
+#include <QColor>
+#include <QFile>
 #include <QPainter>
 #include <QPixmap>
+#include <QRectF>
 
 #include "common/assert.h"
 #include "common/logging/log.h"
@@ -223,7 +226,7 @@ void PluginManager::RegenerateGuiRendererIfNeeded() {
                                     (int)Service::VI::DisplayResolution::UndockedHeight);
         }
         guiPainter = new QPainter(guiPixmap);
-        // TODO render over main screen with setPixmap, maybe in some update loop
+        guiPainter->setWindow(guiPixmap->rect());
     }
 }
 
@@ -895,5 +898,71 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 }
             }
         })
+    ADD_FUNCTION_TO_PLUGIN(gui_getwidth, [](void* ctx) -> uint32_t {
+        Plugin* self = (Plugin*)ctx;
+        return self->system->Renderer().Settings().screenshot_framebuffer_layout.width;
+    })
+    ADD_FUNCTION_TO_PLUGIN(gui_getheight, [](void* ctx) -> uint32_t {
+        Plugin* self = (Plugin*)ctx;
+        return self->system->Renderer().Settings().screenshot_framebuffer_layout.height;
+    })
+    ADD_FUNCTION_TO_PLUGIN(gui_clearscreen, [](void* ctx) -> void {
+        Plugin* self = (Plugin*)ctx;
+        self->pluginManager->RegenerateGuiRendererIfNeeded();
+        auto& painter = self->pluginManager->guiPainter;
+        painter->fillRect(QRectF(0, 0, painter->window().width(), painter->window().height()),
+                          Qt::GlobalColor::transparent);
+    })
+    ADD_FUNCTION_TO_PLUGIN(gui_render, [](void* ctx) -> void {
+        Plugin* self = (Plugin*)ctx;
+        self->pluginManager->RegenerateGuiRendererIfNeeded();
+        self->pluginManager->RenderGui();
+    })
+    ADD_FUNCTION_TO_PLUGIN(gui_drawpixel,
+                           [](void* ctx, uint32_t x, uint32_t y, uint8_t red, uint8_t green,
+                              uint8_t blue, uint8_t alpha) -> void {
+                               Plugin* self = (Plugin*)ctx;
+                               self->pluginManager->RegenerateGuiRendererIfNeeded();
+                               auto& painter = self->pluginManager->guiPainter;
+                               painter->setPen(QColor(red, green, blue, alpha));
+                               painter->drawPoint(x, y);
+                           })
+    ADD_FUNCTION_TO_PLUGIN(gui_savescreenshotas, [](void* ctx, const char* path) -> bool {
+        Plugin* self = (Plugin*)ctx;
+        if (self->pluginManager->screenshot_callback) {
+            QFile file(path);
+            file.open(QIODevice::WriteOnly);
+            self->pluginManager->screenshot_callback().save(&file, "PNG");
+            return true;
+        } else {
+            return false;
+        }
+    })
+    ADD_FUNCTION_TO_PLUGIN(gui_drawimage,
+                           [](void* ctx, int32_t dx, int32_t dy, const char* path, int32_t sx,
+                              int32_t sy, int32_t sw, int32_t sh) -> void {
+                               Plugin* self = (Plugin*)ctx;
+                               self->pluginManager->RegenerateGuiRendererIfNeeded();
+                               QImage image(path);
+                               auto& painter = self->pluginManager->guiPainter;
+                               painter->drawImage(dx, dy, image, sx, sy, sw, sh);
+                           })
+    /*
+// gui.getpixel(int x, int y) ignored
+// gui.box(int x1, int y1, int x2, int y2 [, fillcolor [, outlinecolor]]))
+// gui.drawbox(int x1, int y1, int x2, int y2 [, fillcolor [, outlinecolor]]))
+// gui.rect(int x1, int y1, int x2, int y2 [, fillcolor [, outlinecolor]]))
+// gui.drawrect(int x1, int y1, int x2, int y2 [, fillcolor [, outlinecolor]]))
+// gui.text(int x, int y, string str [, textcolor [, backcolor]])
+// gui.drawtext(int x, int y, string str [, textcolor [, backcolor]])
+// gui.parsecolor(color) ignored
+// gui.opacity(int alpha) ignored
+// gui.transparency(int trans) ignored
+// function gui.register(function func) ignored
+typedef void(gui_popup)(void* ctx, const char* message, const char* type, const char* icon);
+
+// Saves screenshot into byte array as raw framebuffer
+typedef uint8_t*(gui_savescreenshotmemory)(void* ctx, uint64_t* size);
+*/
 }
 } // namespace Tools

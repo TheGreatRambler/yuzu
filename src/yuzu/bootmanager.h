@@ -22,6 +22,8 @@ class GRenderWindow;
 class GMainWindow;
 class QKeyEvent;
 class QTouchEvent;
+class QLabel;
+class QPixmap;
 class QStringList;
 
 namespace InputCommon {
@@ -166,6 +168,9 @@ public:
 
     std::pair<u32, u32> ScaleTouch(const QPointF& pos) const;
 
+    void DisplayPluginGuiCallback(const QPixmap& pixmap);
+    QPixmap TakeScreenshotForPluginCallback();
+
 public slots:
     void OnEmulationStarting(EmuThread* emu_thread);
     void OnEmulationStopping();
@@ -198,6 +203,9 @@ private:
 
     /// Temporary storage of the screenshot taken
     QImage screenshot_image;
+
+    /// Label to display plugin GUI
+    QLabel* pluginGuiOverlay;
 
     QByteArray geometry;
 

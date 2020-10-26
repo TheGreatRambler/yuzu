@@ -29,6 +29,7 @@
 #include "core/hle/service/am/applets/applets.h"
 #include "core/hle/service/hid/controllers/npad.h"
 #include "core/hle/service/hid/hid.h"
+#include "core/tools/plugin_manager.h"
 
 // These are wrappers to avoid the calls to CreateDirectory and CreateFile because of the Windows
 // defines.
@@ -1069,6 +1070,11 @@ bool GMainWindow::LoadROM(const QString& filename) {
     }
     game_path = filename;
 
+    Core::System::GetInstance().PluginManager().SetRenderCallback(
+        std::bind(&GRenderWindow::DisplayPluginGuiCallback, render_window, std::placeholders::_1));
+    Core::System::GetInstance().PluginManager().SetScreenshotCallback(
+        std::bind(&GRenderWindow::TakeScreenshotForPluginCallback, render_window));
+
     system.TelemetrySession().AddField(Common::Telemetry::FieldType::App, "Frontend", "Qt");
     return true;
 }
@@ -1187,6 +1193,9 @@ void GMainWindow::ShutdownGame() {
     emu_thread = nullptr;
 
     discord_rpc->Update();
+
+    Core::System::GetInstance().PluginManager().SetRenderCallback(nullptr);
+    Core::System::GetInstance().PluginManager().SetScreenshotCallback(nullptr);
 
     // The emulation is stopped, so closing the window or not does not matter anymore
     disconnect(render_window, &GRenderWindow::Closed, this, &GMainWindow::OnStopGame);

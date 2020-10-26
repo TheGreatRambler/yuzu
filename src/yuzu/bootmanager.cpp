@@ -7,6 +7,7 @@
 #include <QApplication>
 #include <QHBoxLayout>
 #include <QKeyEvent>
+#include <QLabel>
 #include <QMessageBox>
 #include <QPainter>
 #include <QScreen>
@@ -31,6 +32,7 @@
 #include "core/core.h"
 #include "core/frontend/framebuffer_layout.h"
 #include "core/hle/kernel/process.h"
+#include "core/hle/service/vi/vi.h"
 #include "core/settings.h"
 #include "input_common/keyboard.h"
 #include "input_common/main.h"
@@ -298,6 +300,10 @@ GRenderWindow::GRenderWindow(GMainWindow* parent, EmuThread* emu_thread_,
     setLayout(layout);
     input_subsystem->Initialize();
 
+    pluginGuiOverlay = new QLabel(this);
+    pluginGuiOverlay->setGeometry(0, 0, width(), height());
+    pluginGuiOverlay->show();
+
     this->setMouseTracking(true);
 
     connect(this, &GRenderWindow::FirstFrameDisplayed, parent, &GMainWindow::OnLoadComplete);
@@ -365,6 +371,23 @@ std::pair<u32, u32> GRenderWindow::ScaleTouch(const QPointF& pos) const {
     const qreal pixel_ratio = windowPixelRatio();
     return {static_cast<u32>(std::max(std::round(pos.x() * pixel_ratio), qreal{0.0})),
             static_cast<u32>(std::max(std::round(pos.y() * pixel_ratio), qreal{0.0}))};
+}
+
+void GRenderWindow::DisplayPluginGuiCallback(const QPixmap& pixmap) {
+    pluginGuiOverlay->setPixmap(pixmap.scaled(size()));
+}
+
+QPixmap GRenderWindow::TakeScreenshotForPluginCallback() {
+    QRect rectangle(0, 0, width(), height());
+    QPixmap pixmap(rectangle.width(), rectangle.height());
+    render(&pixmap, QPoint(), QRegion(rectangle));
+    if (Settings::values.use_docked_mode) {
+        return pixmap.scaled((int)Service::VI::DisplayResolution::DockedWidth,
+                             (int)Service::VI::DisplayResolution::DockedHeight);
+    } else {
+        return pixmap.scaled((int)Service::VI::DisplayResolution::UndockedWidth,
+                             (int)Service::VI::DisplayResolution::UndockedHeight);
+    }
 }
 
 void GRenderWindow::closeEvent(QCloseEvent* event) {
@@ -471,6 +494,9 @@ void GRenderWindow::focusOutEvent(QFocusEvent* event) {
 }
 
 void GRenderWindow::resizeEvent(QResizeEvent* event) {
+    pluginGuiOverlay->setPixmap(pluginGuiOverlay->pixmap(Qt::ReturnByValue).scaled(event->size()));
+    pluginGuiOverlay->resize(event->size());
+
     QWidget::resizeEvent(event);
     OnFramebufferSizeChanged();
 }
