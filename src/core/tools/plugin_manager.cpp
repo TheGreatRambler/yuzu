@@ -8,6 +8,7 @@
 
 #include <QColor>
 #include <QFile>
+#include <QMessageBox>
 #include <QPainter>
 #include <QPixmap>
 #include <QRectF>
@@ -264,7 +265,14 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
         Plugin* self = (Plugin*)ctx;
         self->system->Run();
     })
-    // ADD_FUNCTION_TO_PLUGIN(emu_framecount)
+    ADD_FUNCTION_TO_PLUGIN(emu_framecount, [](void* ctx) -> int32_t {
+        Plugin* self = (Plugin*)ctx;
+        return self->system->Renderer().GetCurrentFrame();
+    })
+    ADD_FUNCTION_TO_PLUGIN(emu_fps, [](void* ctx) -> float {
+        Plugin* self = (Plugin*)ctx;
+        return self->system->Renderer().GetCurrentFPS();
+    })
     ADD_FUNCTION_TO_PLUGIN(emu_emulating, [](void* ctx) -> uint8_t {
         Plugin* self = (Plugin*)ctx;
         return self->system->CurrentProcess()->GetStatus() == Kernel::ProcessStatus::Running;
@@ -947,22 +955,41 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                                auto& painter = self->pluginManager->guiPainter;
                                painter->drawImage(dx, dy, image, sx, sy, sw, sh);
                            })
-    /*
-// gui.getpixel(int x, int y) ignored
-// gui.box(int x1, int y1, int x2, int y2 [, fillcolor [, outlinecolor]]))
-// gui.drawbox(int x1, int y1, int x2, int y2 [, fillcolor [, outlinecolor]]))
-// gui.rect(int x1, int y1, int x2, int y2 [, fillcolor [, outlinecolor]]))
-// gui.drawrect(int x1, int y1, int x2, int y2 [, fillcolor [, outlinecolor]]))
-// gui.text(int x, int y, string str [, textcolor [, backcolor]])
-// gui.drawtext(int x, int y, string str [, textcolor [, backcolor]])
-// gui.parsecolor(color) ignored
-// gui.opacity(int alpha) ignored
-// gui.transparency(int trans) ignored
-// function gui.register(function func) ignored
-typedef void(gui_popup)(void* ctx, const char* message, const char* type, const char* icon);
+    ADD_FUNCTION_TO_PLUGIN(
+        gui_popup, [](void* ctx, const char* title, const char* message, const char* type) -> void {
+            Plugin* self = (Plugin*)ctx;
+            QMessageBox msgBox;
+            msgBox.setText(tr(title));
+            msgBox.setInformativeText(tr(message));
 
-// Saves screenshot into byte array as raw framebuffer
-typedef uint8_t*(gui_savescreenshotmemory)(void* ctx, uint64_t* size);
-*/
+            if (strcmp(type, "inform") == 0) {
+                msgBox.msgBox(QMessageBox::Information);
+            } else if (strcmp(type, "warn") == 0) {
+                msgBox.msgBox(QMessageBox::Warning);
+            } else if (strcmp(type, "critical") == 0) {
+                msgBox.msgBox(QMessageBox::Critical);
+            } else {
+                msgBox.msgBox(QMessageBox::NoIcon);
+            }
+
+            msgBox.setStandardButtons(QMessageBox::Ok);
+            msgBox.setDefaultButton(QMessageBox::Ok);
+            msgBox.exec();
+        })
+    ADD_FUNCTION_TO_PLUGIN(gui_savescreenshotmemory, [](void* ctx, uint64_t* size) -> uint8_t* {
+        Plugin* self = (Plugin*)ctx;
+        if (self->pluginManager->screenshot_callback) {
+            QFile file(path);
+            file.open(QIODevice::WriteOnly);
+            auto& image = self->pluginManager->screenshot_callback().convertToImage();
+            size_t imgSize = image.sizeInBytes();
+            uint8_t* imgBuf = malloc(imgSize);
+            *size = imgSize;
+            memcpy(imgBuf, image.bits(), imgSize);
+            return imgBuf;
+        } else {
+            return NULL;
+        }
+    })
 }
 } // namespace Tools

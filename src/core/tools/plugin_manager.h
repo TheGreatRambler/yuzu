@@ -11,6 +11,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <cstring>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -29,7 +30,7 @@
 #include <dlfcn.h>
 #endif
 
-class QPixmap;
+class QImage;
 class QPainter;
 
 namespace Core::Timing {
@@ -186,7 +187,7 @@ private:
     std::string last_error;
 
     LastDockedState lastDockedState{LastDockedState::Neither};
-    QPixmap* guiPixmap;
+    QImage* guiPixmap;
     std::function<void(const QPixmap& pixmap)> render_callback;
 
     Core::System& system;
