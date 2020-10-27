@@ -2,16 +2,13 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
-#ifndef __STRINGIFY
-#define __STRINGIFY(s) #s
-#endif
-
 #include <QColor>
 #include <QFile>
 #include <QMessageBox>
 #include <QPainter>
 #include <QPixmap>
 #include <QRectF>
+#include <QString>
 
 #include "common/assert.h"
 #include "common/logging/log.h"
@@ -77,7 +74,7 @@ void PluginManager::ProcessScriptFromVsync() {
     temp_plugins_to_remove.clear();
 
     for (auto& plugin : plugins) {
-        if (!plugin->pluginThread->joinable()) {
+        if (plugin->pluginThread.get() == nullptr) {
             plugin->pluginThread =
                 std::make_unique<std::thread>(&PluginManager::PluginThreadExecuter, this, plugin);
         }
@@ -204,7 +201,7 @@ bool PluginManager::LoadPlugin(std::string path) {
         plugin->hidAppletResource =
             system.ServiceManager().GetService<Service::HID::Hid>("hid")->GetAppletResource();
 
-        setup(plugin.get());
+        setup();
 
         plugins.push_back(plugin);
     }
@@ -220,12 +217,15 @@ void PluginManager::RegenerateGuiRendererIfNeeded() {
         delete guiPixmap;
         delete guiPainter;
         if (Settings::values.use_docked_mode) {
-            guiPixmap = new QPixmap((int)Service::VI::DisplayResolution::DockedWidth,
-                                    (int)Service::VI::DisplayResolution::DockedHeight);
+            guiPixmap = new QImage((int)Service::VI::DisplayResolution::DockedWidth,
+                                   (int)Service::VI::DisplayResolution::DockedHeight,
+                                   QImage::Format_RGBA8888);
         } else {
-            guiPixmap = new QPixmap((int)Service::VI::DisplayResolution::UndockedWidth,
-                                    (int)Service::VI::DisplayResolution::UndockedHeight);
+            guiPixmap = new QImage((int)Service::VI::DisplayResolution::UndockedWidth,
+                                   (int)Service::VI::DisplayResolution::UndockedHeight,
+                                   QImage::Format_RGBA8888);
         }
+        guiPixmap->fill(0);
         guiPainter = new QPainter(guiPixmap);
         guiPainter->setWindow(guiPixmap->rect());
     }
@@ -234,8 +234,6 @@ void PluginManager::RegenerateGuiRendererIfNeeded() {
 void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
     // For every function in plugin_definitions.hpp
     // Can use lambdas
-    PluginDefinitions::meta_add_function* func;
-
     ADD_FUNCTION_TO_PLUGIN(meta_free, [](void* ptr) -> void {
         // The plugin might have a different allocater
         free(ptr);
@@ -762,6 +760,8 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 return handle.diameter_y;
             case PluginDefinitions::TouchTypes::RotationAngle:
                 return handle.rotation_angle;
+            default:
+                break;
             }
         })
     ADD_FUNCTION_TO_PLUGIN(
@@ -787,6 +787,8 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 break;
             case PluginDefinitions::TouchTypes::RotationAngle:
                 handle.rotation_angle = val;
+                break;
+            default:
                 break;
             }
         })
@@ -816,6 +818,8 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             case PluginDefinitions::MouseTypes::WheelY:
                 handle.mouse_wheel_y = val;
                 break;
+            default:
+                break;
             }
         })
     ADD_FUNCTION_TO_PLUGIN(
@@ -838,6 +842,8 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 return handle.mouse_wheel_x;
             case PluginDefinitions::MouseTypes::WheelY:
                 return handle.mouse_wheel_y;
+            default:
+                break;
             }
         })
     ADD_FUNCTION_TO_PLUGIN(
@@ -903,6 +909,8 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 case PluginDefinitions::EnableInputType::EnableTouchscreen:
                     touchscreen.EnableOutsideInput(enable);
                     break;
+                default:
+                    break;
                 }
             }
         })
@@ -959,17 +967,17 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
         gui_popup, [](void* ctx, const char* title, const char* message, const char* type) -> void {
             Plugin* self = (Plugin*)ctx;
             QMessageBox msgBox;
-            msgBox.setText(tr(title));
-            msgBox.setInformativeText(tr(message));
+            msgBox.setText(QString::fromUtf8(title));
+            msgBox.setInformativeText(QString::fromUtf8(message));
 
             if (strcmp(type, "inform") == 0) {
-                msgBox.msgBox(QMessageBox::Information);
+                msgBox.setIcon(QMessageBox::Information);
             } else if (strcmp(type, "warn") == 0) {
-                msgBox.msgBox(QMessageBox::Warning);
+                msgBox.setIcon(QMessageBox::Warning);
             } else if (strcmp(type, "critical") == 0) {
-                msgBox.msgBox(QMessageBox::Critical);
+                msgBox.setIcon(QMessageBox::Critical);
             } else {
-                msgBox.msgBox(QMessageBox::NoIcon);
+                msgBox.setIcon(QMessageBox::NoIcon);
             }
 
             msgBox.setStandardButtons(QMessageBox::Ok);
@@ -979,11 +987,9 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
     ADD_FUNCTION_TO_PLUGIN(gui_savescreenshotmemory, [](void* ctx, uint64_t* size) -> uint8_t* {
         Plugin* self = (Plugin*)ctx;
         if (self->pluginManager->screenshot_callback) {
-            QFile file(path);
-            file.open(QIODevice::WriteOnly);
-            auto& image = self->pluginManager->screenshot_callback().convertToImage();
+            auto const& image = self->pluginManager->screenshot_callback();
             size_t imgSize = image.sizeInBytes();
-            uint8_t* imgBuf = malloc(imgSize);
+            uint8_t* imgBuf = (uint8_t*)malloc(imgSize);
             *size = imgSize;
             memcpy(imgBuf, image.bits(), imgSize);
             return imgBuf;

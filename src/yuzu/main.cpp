@@ -29,7 +29,6 @@
 #include "core/hle/service/am/applets/applets.h"
 #include "core/hle/service/hid/controllers/npad.h"
 #include "core/hle/service/hid/hid.h"
-#include "core/tools/plugin_manager.h"
 
 // These are wrappers to avoid the calls to CreateDirectory and CreateFile because of the Windows
 // defines.
@@ -97,6 +96,7 @@ static FileSys::VirtualFile VfsDirectoryCreateFileWrapper(const FileSys::Virtual
 #include "core/perf_stats.h"
 #include "core/settings.h"
 #include "core/telemetry_session.h"
+#include "core/tools/plugin_manager.h"
 #include "input_common/main.h"
 #include "video_core/gpu.h"
 #include "video_core/shader_notify.h"

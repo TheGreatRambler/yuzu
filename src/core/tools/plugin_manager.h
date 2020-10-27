@@ -4,10 +4,26 @@
 
 #pragma once
 
+#ifdef _WIN32
 #define ADD_FUNCTION_TO_PLUGIN(type, address)                                                      \
-    func = GetDllFunction<PluginDefinitions::meta_add_function>(*plugin, "yuzupluginset_" #type);  \
-    if (func)                                                                                      \
-        func((void*)((PluginDefinitions::type*)address));
+    {                                                                                              \
+        PluginDefinitions::type** pointer =                                                        \
+            (PluginDefinitions::type**)GetProcAddress(plugin->sharedLibHandle, "yuzu_" #type);     \
+        if (pointer) {                                                                             \
+            *pointer = (PluginDefinitions::type*)address;                                          \
+        }                                                                                          \
+    }
+#endif
+#if defined(__linux__) || defined(__APPLE__)
+#define ADD_FUNCTION_TO_PLUGIN(type, address)                                                      \
+    {                                                                                              \
+        PluginDefinitions::type** pointer =                                                        \
+            (PluginDefinitions::type**)dlsym(plugin->sharedLibHandle, "yuzu_" #type);              \
+        if (pointer) {                                                                             \
+            *pointer = (PluginDefinitions::type*)address;                                          \
+        }                                                                                          \
+    }
+#endif
 
 #include <atomic>
 #include <condition_variable>
@@ -63,27 +79,6 @@ class IAppletResource;
 } // namespace Service::HID
 
 namespace Tools {
-struct Plugin {
-    bool ready{false};
-    std::string path;
-    std::atomic_bool processedMainLoop{false};
-    std::atomic_bool encounteredVsync{false};
-    bool hasStopped{false};
-    std::mutex pluginMutex;
-    std::condition_variable pluginCv;
-    std::unique_ptr<std::thread> pluginThread;
-    bool pluginAvailable;
-    Tools::PluginManager* pluginManager;
-    std::shared_ptr<Service::HID::IAppletResource> hidAppletResource;
-    Core::System* system;
-#ifdef _WIN32
-    HMODULE sharedLibHandle;
-#endif
-#if defined(__linux__) || defined(__APPLE__)
-    void* sharedLibHandle;
-#endif
-};
-
 /**
  * This class allows the user to enable plugins that give a DLL access to the game. This can enable
  * the user to attach separate programs that have additional control over the emulator without
@@ -125,11 +120,11 @@ public:
         last_error = "";
     }
 
-    void SetRenderCallback(std::function<void(const QPixmap& pixmap)> callback) {
+    void SetRenderCallback(std::function<void(const QImage& pixmap)> callback) {
         render_callback = callback;
     }
 
-    void SetScreenshotCallback(std::function<QPixmap()> callback) {
+    void SetScreenshotCallback(std::function<QImage()> callback) {
         screenshot_callback = callback;
     }
 
@@ -141,9 +136,29 @@ public:
     }
 
     QPainter* guiPainter;
-    std::function<QPixmap()> screenshot_callback;
+    std::function<QImage()> screenshot_callback;
 
 private:
+    struct Plugin {
+        bool ready{false};
+        std::string path;
+        std::atomic_bool processedMainLoop{false};
+        std::atomic_bool encounteredVsync{false};
+        bool hasStopped{false};
+        std::mutex pluginMutex;
+        std::condition_variable pluginCv;
+        std::unique_ptr<std::thread> pluginThread{nullptr};
+        Tools::PluginManager* pluginManager;
+        std::shared_ptr<Service::HID::IAppletResource> hidAppletResource{nullptr};
+        Core::System* system{nullptr};
+#ifdef _WIN32
+        HMODULE sharedLibHandle;
+#endif
+#if defined(__linux__) || defined(__APPLE__)
+        void* sharedLibHandle;
+#endif
+    };
+
     enum LastDockedState : uint8_t {
         Neither,
         Docked,
@@ -188,7 +203,7 @@ private:
 
     LastDockedState lastDockedState{LastDockedState::Neither};
     QImage* guiPixmap;
-    std::function<void(const QPixmap& pixmap)> render_callback;
+    std::function<void(const QImage& pixmap)> render_callback;
 
     Core::System& system;
     Core::Timing::CoreTiming& core_timing;

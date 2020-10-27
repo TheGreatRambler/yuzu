@@ -16,7 +16,7 @@
 #include "yuzu/uisettings.h"
 
 PluginDialog::PluginDialog(QWidget* parent) : QDialog(parent) {
-    plugins_path = QCoreApplication::applicationDirPath() + tr("/yuzu_plugins/");
+    plugins_path = QCoreApplication::applicationDirPath() + QStringLiteral("/yuzu_plugins/");
     setAttribute(Qt::WA_DeleteOnClose);
 
     Core::System::GetInstance().PluginManager().SetPluginCallback(
@@ -28,7 +28,7 @@ PluginDialog::PluginDialog(QWidget* parent) : QDialog(parent) {
     plugin_list->setObjectName(QStringLiteral("PluginList"));
     updateAvailablePlugins();
 
-    refresh_button = new QPushButton(tr("Refresh list"), this);
+    refresh_button = new QPushButton(QStringLiteral("Refresh list"), this);
     refresh_button->setObjectName(QStringLiteral("RefreshButton"));
 
     connect(refresh_button, &QPushButton::clicked, this, [this]() {
@@ -41,7 +41,7 @@ PluginDialog::PluginDialog(QWidget* parent) : QDialog(parent) {
 
     setLayout(main_layout);
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
-    setWindowTitle(tr("Plugin Manager"));
+    setWindowTitle(QStringLiteral("Plugin Manager"));
 
     filesystem_watcher.addPath(plugins_path);
 
@@ -72,13 +72,14 @@ void PluginDialog::updateAvailablePlugins() {
     if (QDir(plugins_path).exists()) {
         plugin_list->clear();
 
-        QDirIterator plugins(plugins_path, QStringList() << tr("*.dll"), QDir::Files,
-                             QDirIterator::Subdirectories);
+        QDirIterator plugins(plugins_path,
+                             QStringList() << QStringLiteral("*.dll") << QStringLiteral("*.so"),
+                             QDir::Files, QDirIterator::Subdirectories);
         while (plugins.hasNext()) {
             QString available_path = plugins.next();
 
             QListWidgetItem* item =
-                new QListWidgetItem(available_path.replace(plugins_path, tr("")));
+                new QListWidgetItem(available_path.replace(plugins_path, QStringLiteral("")));
             item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
             item->setCheckState(Qt::Unchecked);
             plugin_list->addItem(item);

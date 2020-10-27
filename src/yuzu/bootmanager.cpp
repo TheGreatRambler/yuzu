@@ -373,20 +373,24 @@ std::pair<u32, u32> GRenderWindow::ScaleTouch(const QPointF& pos) const {
             static_cast<u32>(std::max(std::round(pos.y() * pixel_ratio), qreal{0.0}))};
 }
 
-void GRenderWindow::DisplayPluginGuiCallback(const QPixmap& pixmap) {
-    pluginGuiOverlay->setPixmap(pixmap.scaled(size()));
+void GRenderWindow::DisplayPluginGuiCallback(const QImage& image) {
+    pluginGuiOverlay->setPixmap(QPixmap::fromImage(image.scaled(size())));
 }
 
-QPixmap GRenderWindow::TakeScreenshotForPluginCallback() {
-    QRect rectangle(0, 0, width(), height());
+QImage GRenderWindow::TakeScreenshotForPluginCallback() {
+    QRect rectangle(0, 0, child_widget->width(), child_widget->height());
     QPixmap pixmap(rectangle.width(), rectangle.height());
-    render(&pixmap, QPoint(), QRegion(rectangle));
+    child_widget->render(&pixmap, QPoint(), QRegion(rectangle));
     if (Settings::values.use_docked_mode) {
-        return pixmap.scaled((int)Service::VI::DisplayResolution::DockedWidth,
-                             (int)Service::VI::DisplayResolution::DockedHeight);
+        return pixmap
+            .scaled((int)Service::VI::DisplayResolution::DockedWidth,
+                    (int)Service::VI::DisplayResolution::DockedHeight)
+            .toImage();
     } else {
-        return pixmap.scaled((int)Service::VI::DisplayResolution::UndockedWidth,
-                             (int)Service::VI::DisplayResolution::UndockedHeight);
+        return pixmap
+            .scaled((int)Service::VI::DisplayResolution::UndockedWidth,
+                    (int)Service::VI::DisplayResolution::UndockedHeight)
+            .toImage();
     }
 }
 

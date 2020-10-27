@@ -168,8 +168,8 @@ public:
 
     std::pair<u32, u32> ScaleTouch(const QPointF& pos) const;
 
-    void DisplayPluginGuiCallback(const QPixmap& pixmap);
-    QPixmap TakeScreenshotForPluginCallback();
+    void DisplayPluginGuiCallback(const QImage& image);
+    QImage TakeScreenshotForPluginCallback();
 
 public slots:
     void OnEmulationStarting(EmuThread* emu_thread);
