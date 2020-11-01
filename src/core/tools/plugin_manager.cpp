@@ -2,8 +2,11 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <QBuffer>
+#include <QByteArray>
 #include <QColor>
 #include <QFile>
+#include <QImageWriter>
 #include <QMessageBox>
 #include <QPainter>
 #include <QPixmap>
@@ -612,6 +615,19 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             npad.UpdateControllerAt((NpadType)type, index,
                                     Settings::values.players[index].connected);
         })
+    ADD_FUNCTION_TO_PLUGIN(
+        joypad_getjoypadtype,
+        [](void* ctx,
+           PluginDefinitions::ControllerNumber player) -> PluginDefinitions::ControllerType {
+            Plugin* self = (Plugin*)ctx;
+            Service::HID::Controller_NPad& npad =
+                self->hidAppletResource->GetController<Service::HID::Controller_NPad>(
+                    Service::HID::HidController::NPad);
+            size_t index = (size_t)player;
+            return (PluginDefinitions::ControllerType)
+                Service::HID::Controller_NPad::MapSettingsTypeToNPad(
+                    Settings::values.players[index].controller_type);
+        })
     ADD_FUNCTION_TO_PLUGIN(joypad_isjoypadconnected,
                            [](void* ctx, PluginDefinitions::ControllerNumber player) -> uint8_t {
                                return Settings::values.players[(size_t)player].connected;
@@ -948,7 +964,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
         if (self->pluginManager->screenshot_callback) {
             QFile file(path);
             file.open(QIODevice::WriteOnly);
-            self->pluginManager->screenshot_callback().save(&file, "PNG");
+            self->pluginManager->screenshot_callback().save(&file);
             return true;
         } else {
             return false;
@@ -984,18 +1000,36 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             msgBox.setDefaultButton(QMessageBox::Ok);
             msgBox.exec();
         })
-    ADD_FUNCTION_TO_PLUGIN(gui_savescreenshotmemory, [](void* ctx, uint64_t* size) -> uint8_t* {
-        Plugin* self = (Plugin*)ctx;
-        if (self->pluginManager->screenshot_callback) {
-            auto const& image = self->pluginManager->screenshot_callback();
-            size_t imgSize = image.sizeInBytes();
-            uint8_t* imgBuf = (uint8_t*)malloc(imgSize);
-            *size = imgSize;
-            memcpy(imgBuf, image.bits(), imgSize);
-            return imgBuf;
-        } else {
-            return NULL;
-        }
-    })
+    ADD_FUNCTION_TO_PLUGIN(gui_savescreenshotmemory,
+                           [](void* ctx, uint64_t* size, const char* format) -> uint8_t* {
+                               Plugin* self = (Plugin*)ctx;
+                               if (self->pluginManager->screenshot_callback) {
+                                   auto const& image = self->pluginManager->screenshot_callback();
+                                   if (strcmp(format, "NONE") == 0) {
+                                       size_t imgSize = image.sizeInBytes();
+                                       uint8_t* imgBuf = (uint8_t*)malloc(imgSize);
+                                       *size = imgSize;
+                                       memcpy(imgBuf, image.bits(), imgSize);
+                                       return imgBuf;
+                                   } else {
+                                       QByteArray array;
+                                       QBuffer buffer(&array);
+
+                                       QImageWriter writer;
+                                       writer.setDevice(&buffer);
+                                       writer.setFormat(format);
+                                       writer.setCompression(9);
+                                       writer.write(image);
+
+                                       size_t imgSize = array.size();
+                                       uint8_t* imgBuf = (uint8_t*)malloc(imgSize);
+                                       *size = imgSize;
+                                       memcpy(imgBuf, array.data(), imgSize);
+                                       return imgBuf;
+                                   }
+                               } else {
+                                   return NULL;
+                               }
+                           })
 }
 } // namespace Tools
