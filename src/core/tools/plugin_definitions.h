@@ -31,7 +31,7 @@ enum class EnableInputType : uint16_t {
     EnableTouchscreen = 10,
     EnableMouse = 11,
     EnableKeyboard = 12,
-    All = 13,
+    AllControllers = 13,
 };
 
 enum class YuzuJoystickType : uint8_t {

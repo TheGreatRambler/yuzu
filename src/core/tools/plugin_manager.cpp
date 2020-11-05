@@ -198,6 +198,8 @@ bool PluginManager::LoadPlugin(std::string path) {
             return false;
         }
 
+        ConnectAllDllFunctions(plugin);
+
         loaded_plugins.insert(path);
 
         plugin->system = &system;
@@ -880,13 +882,13 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 self->hidAppletResource->GetController<Service::HID::Controller_Mouse>(
                     Service::HID::HidController::Mouse);
 
-            if (typetoenable == PluginDefinitions::EnableInputType::All) {
+            if (typetoenable == PluginDefinitions::EnableInputType::AllControllers) {
                 for (uint32_t joypad = 0; joypad < Settings::values.players.size(); joypad++) {
                     npad.EnableOutsideInput(joypad, enable);
                 }
-                keyboard.EnableOutsideInput(enable);
-                mouse.EnableOutsideInput(enable);
-                touchscreen.EnableOutsideInput(enable);
+                // keyboard.EnableOutsideInput(enable);
+                // mouse.EnableOutsideInput(enable);
+                // touchscreen.EnableOutsideInput(enable);
             } else {
                 switch (typetoenable) {
                 case PluginDefinitions::EnableInputType::EnableController1:
