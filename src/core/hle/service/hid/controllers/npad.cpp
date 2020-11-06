@@ -908,8 +908,11 @@ Controller_NPad::ControllerPad& Controller_NPad::GetRawHandle(u32 npad_id) {
     return npad_pad_states[NPadIdToIndex(npad_id)];
 }
 
-Controller_NPad::MotionDevice& Controller_NPad::GetRawMotionHandle(u32 npad_id) {
-    return motion_devices[NPadIdToIndex(npad_id)];
+Controller_NPad::MotionDevice& Controller_NPad::GetRawMotionHandle(u32 npad_id,
+                                                                   u32 npad_dual_side) {
+    // motion_devices is updated RIGHT before it is read, it does not actually hold the value per
+    // controller
+    // return *motions[NPadIdToIndex(npad_id)][npad_dual_side];
 }
 
 void Controller_NPad::EnableOutsideInput(u32 npad_id, bool enable) {

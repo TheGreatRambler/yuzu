@@ -239,7 +239,7 @@ public:
 
     // Used to obtain a raw handle to motion data
     // Specifically for the plugin manager
-    MotionDevice& GetRawMotionHandle(u32 npad_id);
+    MotionDevice& GetRawMotionHandle(u32 npad_id, u32 npad_dual_side);
 
     // Enable input from user (as opposed to from a plugin) for this controller
     // Specifically for the plugin manager

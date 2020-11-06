@@ -380,8 +380,8 @@ typedef void(joypad_set)(void* ctx, ControllerNumber player, uint64_t input);
 typedef int16_t(joypad_readjoystick)(void* ctx, ControllerNumber player, YuzuJoystickType type);
 typedef void(joypad_setjoystick)(void* ctx, ControllerNumber player, YuzuJoystickType type,
                                  int16_t val);
-typedef float(joypad_readsixaxis)(void* ctx, ControllerNumber player, SixAxisMotionTypes type);
-typedef void(joypad_setsixaxis)(void* ctx, ControllerNumber player, SixAxisMotionTypes type,
+typedef float(joypad_readsixaxis)(void* ctx, ControllerNumber player, SixAxisMotionTypes type, PluginDefinitions::ControllerType joycon_type);
+typedef void(joypad_setsixaxis)(void* ctx, ControllerNumber player, SixAxisMotionTypes type, PluginDefinitions::ControllerType joycon_type,
                                 float val);
 typedef void(joypad_enablejoypad)(void* ctx, ControllerNumber player, uint8_t enable);
 typedef void(joypad_removealljoypads)(void* ctx);
