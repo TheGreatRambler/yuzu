@@ -481,7 +481,15 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 self->hidAppletResource->GetController<Service::HID::Controller_NPad>(
                     Service::HID::HidController::NPad);
             npad.RequestMotionUpdate((uint32_t)player);
-            auto& handle = npad.GetRawMotionHandle((uint32_t)player, (uint32_t)joycon_type);
+            uint32_t corrected_joycon_type;
+            if (joycon_type == PluginDefinitions::ControllerType::JoyLeft) {
+                corrected_joycon_type = 0;
+            } else if (joycon_type == PluginDefinitions::ControllerType::JoyRight) {
+                corrected_joycon_type = 1;
+            } else {
+                corrected_joycon_type = 0;
+            }
+            auto& handle = npad.GetRawMotionHandle((uint32_t)player, corrected_joycon_type);
             switch (type) {
             case PluginDefinitions::SixAxisMotionTypes::AccelerationX:
                 return handle.accel.x;
@@ -524,13 +532,21 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
     ADD_FUNCTION_TO_PLUGIN(
         joypad_setsixaxis,
         [](void* ctx, PluginDefinitions::ControllerNumber player,
-           PluginDefinitions::SixAxisMotionTypes type, ,
+           PluginDefinitions::SixAxisMotionTypes type,
            PluginDefinitions::ControllerType joycon_type, float input) -> void {
             Plugin* self = (Plugin*)ctx;
             Service::HID::Controller_NPad& npad =
                 self->hidAppletResource->GetController<Service::HID::Controller_NPad>(
                     Service::HID::HidController::NPad);
-            auto& handle = npad.GetRawMotionHandle((uint32_t)player, (uint32_t)joycon_type);
+            uint32_t corrected_joycon_type;
+            if (joycon_type == PluginDefinitions::ControllerType::JoyLeft) {
+                corrected_joycon_type = 0;
+            } else if (joycon_type == PluginDefinitions::ControllerType::JoyRight) {
+                corrected_joycon_type = 1;
+            } else {
+                corrected_joycon_type = 0;
+            }
+            auto& handle = npad.GetRawMotionHandle((uint32_t)player, corrected_joycon_type);
             switch (type) {
             case PluginDefinitions::SixAxisMotionTypes::AccelerationX:
                 handle.accel.x = input;

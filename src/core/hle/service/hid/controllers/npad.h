@@ -411,7 +411,7 @@ private:
     bool sixaxis_sensors_enabled{true};
     bool sixaxis_at_rest{true};
     std::array<ControllerPad, 10> npad_pad_states{};
-    std::array<MotionDevice, 2> motion_devices;
+    std::array<std::array<MotionDevice, 2>, 10> motion_devices;
     std::array<bool, 10> outside_input_enabled{true};
     bool is_in_lr_assignment_mode{false};
     Core::System& system;

@@ -339,12 +339,14 @@ void Controller_NPad::RequestMotionUpdate(u32 npad_id) {
     if (sixaxis_sensors_enabled && Settings::values.motion_enabled) {
         sixaxis_at_rest = true;
         for (std::size_t e = 0; e < motion_devices.size(); ++e) {
-            const auto& device = motions[NPadIdToIndex(npad_id)][e];
+            std::size_t index = NPadIdToIndex(npad_id);
+            const auto& device = motions[index][e];
             if (device) {
-                std::tie(motion_devices[e].accel, motion_devices[e].gyro,
-                         motion_devices[e].rotation, motion_devices[e].orientation) =
+                std::tie(motion_devices[index][e].accel, motion_devices[index][e].gyro,
+                         motion_devices[index][e].rotation, motion_devices[index][e].orientation) =
                     device->GetStatus();
-                sixaxis_at_rest = sixaxis_at_rest && motion_devices[e].gyro.Length2() < 0.0001f;
+                sixaxis_at_rest =
+                    sixaxis_at_rest && motion_devices[index][e].gyro.Length2() < 0.0001f;
             }
         }
     }
@@ -579,50 +581,50 @@ void Controller_NPad::OnMotionUpdate(const Core::Timing::CoreTiming& core_timing
             break;
         case NPadControllerType::ProController:
             if (sixaxis_sensors_enabled && motions[i][0]) {
-                full_sixaxis_entry.accel = motion_devices[0].accel;
-                full_sixaxis_entry.gyro = motion_devices[0].gyro;
-                full_sixaxis_entry.rotation = motion_devices[0].rotation;
-                full_sixaxis_entry.orientation = motion_devices[0].orientation;
+                full_sixaxis_entry.accel = motion_devices[i][0].accel;
+                full_sixaxis_entry.gyro = motion_devices[i][0].gyro;
+                full_sixaxis_entry.rotation = motion_devices[i][0].rotation;
+                full_sixaxis_entry.orientation = motion_devices[i][0].orientation;
             }
             break;
         case NPadControllerType::Handheld:
             if (sixaxis_sensors_enabled && motions[i][0]) {
-                handheld_sixaxis_entry.accel = motion_devices[0].accel;
-                handheld_sixaxis_entry.gyro = motion_devices[0].gyro;
-                handheld_sixaxis_entry.rotation = motion_devices[0].rotation;
-                handheld_sixaxis_entry.orientation = motion_devices[0].orientation;
+                handheld_sixaxis_entry.accel = motion_devices[i][0].accel;
+                handheld_sixaxis_entry.gyro = motion_devices[i][0].gyro;
+                handheld_sixaxis_entry.rotation = motion_devices[i][0].rotation;
+                handheld_sixaxis_entry.orientation = motion_devices[i][0].orientation;
             }
             break;
         case NPadControllerType::JoyDual:
             if (sixaxis_sensors_enabled && motions[i][0]) {
                 // Set motion for the left joycon
-                dual_left_sixaxis_entry.accel = motion_devices[0].accel;
-                dual_left_sixaxis_entry.gyro = motion_devices[0].gyro;
-                dual_left_sixaxis_entry.rotation = motion_devices[0].rotation;
-                dual_left_sixaxis_entry.orientation = motion_devices[0].orientation;
+                dual_left_sixaxis_entry.accel = motion_devices[i][0].accel;
+                dual_left_sixaxis_entry.gyro = motion_devices[i][0].gyro;
+                dual_left_sixaxis_entry.rotation = motion_devices[i][0].rotation;
+                dual_left_sixaxis_entry.orientation = motion_devices[i][0].orientation;
             }
             if (sixaxis_sensors_enabled && motions[i][1]) {
                 // Set motion for the right joycon
-                dual_right_sixaxis_entry.accel = motion_devices[1].accel;
-                dual_right_sixaxis_entry.gyro = motion_devices[1].gyro;
-                dual_right_sixaxis_entry.rotation = motion_devices[1].rotation;
-                dual_right_sixaxis_entry.orientation = motion_devices[1].orientation;
+                dual_right_sixaxis_entry.accel = motion_devices[i][1].accel;
+                dual_right_sixaxis_entry.gyro = motion_devices[i][1].gyro;
+                dual_right_sixaxis_entry.rotation = motion_devices[i][1].rotation;
+                dual_right_sixaxis_entry.orientation = motion_devices[i][1].orientation;
             }
             break;
         case NPadControllerType::JoyLeft:
             if (sixaxis_sensors_enabled && motions[i][0]) {
-                left_sixaxis_entry.accel = motion_devices[0].accel;
-                left_sixaxis_entry.gyro = motion_devices[0].gyro;
-                left_sixaxis_entry.rotation = motion_devices[0].rotation;
-                left_sixaxis_entry.orientation = motion_devices[0].orientation;
+                left_sixaxis_entry.accel = motion_devices[i][0].accel;
+                left_sixaxis_entry.gyro = motion_devices[i][0].gyro;
+                left_sixaxis_entry.rotation = motion_devices[i][0].rotation;
+                left_sixaxis_entry.orientation = motion_devices[i][0].orientation;
             }
             break;
         case NPadControllerType::JoyRight:
             if (sixaxis_sensors_enabled && motions[i][1]) {
-                right_sixaxis_entry.accel = motion_devices[1].accel;
-                right_sixaxis_entry.gyro = motion_devices[1].gyro;
-                right_sixaxis_entry.rotation = motion_devices[1].rotation;
-                right_sixaxis_entry.orientation = motion_devices[1].orientation;
+                right_sixaxis_entry.accel = motion_devices[i][1].accel;
+                right_sixaxis_entry.gyro = motion_devices[i][1].gyro;
+                right_sixaxis_entry.rotation = motion_devices[i][1].rotation;
+                right_sixaxis_entry.orientation = motion_devices[i][1].orientation;
             }
             break;
         case NPadControllerType::Pokeball:
@@ -910,9 +912,7 @@ Controller_NPad::ControllerPad& Controller_NPad::GetRawHandle(u32 npad_id) {
 
 Controller_NPad::MotionDevice& Controller_NPad::GetRawMotionHandle(u32 npad_id,
                                                                    u32 npad_dual_side) {
-    // motion_devices is updated RIGHT before it is read, it does not actually hold the value per
-    // controller
-    // return *motions[NPadIdToIndex(npad_id)][npad_dual_side];
+    return motion_devices[NPadIdToIndex(npad_id)][npad_dual_side];
 }
 
 void Controller_NPad::EnableOutsideInput(u32 npad_id, bool enable) {
