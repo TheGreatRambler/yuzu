@@ -736,6 +736,54 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 handle.modifier &= ~BIT(corrected_modifier);
             }
         })
+    ADD_FUNCTION_TO_PLUGIN(input_getkeyraw, [](void* ctx, void* mem) -> void {
+        Plugin* self = (Plugin*)ctx;
+        Service::HID::Controller_Keyboard& keyboard =
+            self->hidAppletResource->GetController<Service::HID::Controller_Keyboard>(
+                Service::HID::HidController::Keyboard);
+        auto& handle = keyboard.GetRawHandle();
+        memcpy(mem, handle.key.data(), handle.key.size());
+    })
+    ADD_FUNCTION_TO_PLUGIN(input_getkeymodifierraw, [](void* ctx) -> int32_t {
+        Plugin* self = (Plugin*)ctx;
+        Service::HID::Controller_Keyboard& keyboard =
+            self->hidAppletResource->GetController<Service::HID::Controller_Keyboard>(
+                Service::HID::HidController::Keyboard);
+        auto& handle = keyboard.GetRawHandle();
+        return handle.modifier;
+    })
+    ADD_FUNCTION_TO_PLUGIN(input_getmouseraw, [](void* ctx) -> int32_t {
+        Plugin* self = (Plugin*)ctx;
+        Service::HID::Controller_Mouse& mouse =
+            self->hidAppletResource->GetController<Service::HID::Controller_Mouse>(
+                Service::HID::HidController::Mouse);
+        auto& handle = mouse.GetRawHandle();
+        return handle.button;
+    })
+    ADD_FUNCTION_TO_PLUGIN(input_setkeyraw, [](void* ctx, void* mem) -> void {
+        Plugin* self = (Plugin*)ctx;
+        Service::HID::Controller_Keyboard& keyboard =
+            self->hidAppletResource->GetController<Service::HID::Controller_Keyboard>(
+                Service::HID::HidController::Keyboard);
+        auto& handle = keyboard.GetRawHandle();
+        memcpy(handle.key.data(), mem, handle.key.size());
+    })
+    ADD_FUNCTION_TO_PLUGIN(input_setkeymodifierraw, [](void* ctx, int32_t mem) -> void {
+        Plugin* self = (Plugin*)ctx;
+        Service::HID::Controller_Keyboard& keyboard =
+            self->hidAppletResource->GetController<Service::HID::Controller_Keyboard>(
+                Service::HID::HidController::Keyboard);
+        auto& handle = keyboard.GetRawHandle();
+        handle.modifier = mem;
+    })
+    ADD_FUNCTION_TO_PLUGIN(input_setmouseraw, [](void* ctx, int32_t mem) -> void {
+        Plugin* self = (Plugin*)ctx;
+        Service::HID::Controller_Mouse& mouse =
+            self->hidAppletResource->GetController<Service::HID::Controller_Mouse>(
+                Service::HID::HidController::Mouse);
+        auto& handle = mouse.GetRawHandle();
+        handle.button = mem;
+    })
     ADD_FUNCTION_TO_PLUGIN(
         input_ismousepressed, [](void* ctx, PluginDefinitions::MouseButton button) -> uint8_t {
             Plugin* self = (Plugin*)ctx;
@@ -778,7 +826,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
         handle.entry_count = num;
     })
     ADD_FUNCTION_TO_PLUGIN(
-        joypad_readtouch,
+        input_readtouch,
         [](void* ctx, uint8_t idx, PluginDefinitions::TouchTypes type) -> uint32_t {
             Plugin* self = (Plugin*)ctx;
             Service::HID::Controller_Touchscreen& touchscreen =
@@ -801,7 +849,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             }
         })
     ADD_FUNCTION_TO_PLUGIN(
-        joypad_settouch,
+        input_settouch,
         [](void* ctx, uint8_t idx, PluginDefinitions::TouchTypes type, uint32_t val) -> void {
             Plugin* self = (Plugin*)ctx;
             Service::HID::Controller_Touchscreen& touchscreen =
@@ -829,7 +877,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             }
         })
     ADD_FUNCTION_TO_PLUGIN(
-        joypad_movemouse, [](void* ctx, PluginDefinitions::MouseTypes type, int32_t val) -> void {
+        input_movemouse, [](void* ctx, PluginDefinitions::MouseTypes type, int32_t val) -> void {
             Plugin* self = (Plugin*)ctx;
             Service::HID::Controller_Mouse& mouse =
                 self->hidAppletResource->GetController<Service::HID::Controller_Mouse>(
@@ -859,7 +907,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             }
         })
     ADD_FUNCTION_TO_PLUGIN(
-        joypad_readmouse, [](void* ctx, PluginDefinitions::MouseTypes type) -> int32_t {
+        input_readmouse, [](void* ctx, PluginDefinitions::MouseTypes type) -> int32_t {
             Plugin* self = (Plugin*)ctx;
             Service::HID::Controller_Mouse& mouse =
                 self->hidAppletResource->GetController<Service::HID::Controller_Mouse>(
@@ -999,27 +1047,28 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                                auto& painter = self->pluginManager->guiPainter;
                                painter->drawImage(dx, dy, image, sx, sy, sw, sh);
                            })
-    ADD_FUNCTION_TO_PLUGIN(
-        gui_popup, [](void* ctx, const char* title, const char* message, const char* type) -> void {
-            Plugin* self = (Plugin*)ctx;
-            QMessageBox msgBox;
-            msgBox.setText(QString::fromUtf8(title));
-            msgBox.setInformativeText(QString::fromUtf8(message));
+    ADD_FUNCTION_TO_PLUGIN(gui_popup,
+                           [](void* ctx, const char* title, const char* message,
+                              PluginDefinitions::PopupType type) -> void {
+                               Plugin* self = (Plugin*)ctx;
+                               QMessageBox msgBox;
+                               msgBox.setText(QString::fromUtf8(title));
+                               msgBox.setInformativeText(QString::fromUtf8(message));
 
-            if (strcmp(type, "inform") == 0) {
-                msgBox.setIcon(QMessageBox::Information);
-            } else if (strcmp(type, "warn") == 0) {
-                msgBox.setIcon(QMessageBox::Warning);
-            } else if (strcmp(type, "critical") == 0) {
-                msgBox.setIcon(QMessageBox::Critical);
-            } else {
-                msgBox.setIcon(QMessageBox::NoIcon);
-            }
+                               if (type == PluginDefinitions::PopupType::Information) {
+                                   msgBox.setIcon(QMessageBox::Information);
+                               } else if (type == PluginDefinitions::PopupType::Warning) {
+                                   msgBox.setIcon(QMessageBox::Warning);
+                               } else if (type == PluginDefinitions::PopupType::Critical) {
+                                   msgBox.setIcon(QMessageBox::Critical);
+                               } else {
+                                   msgBox.setIcon(QMessageBox::NoIcon);
+                               }
 
-            msgBox.setStandardButtons(QMessageBox::Ok);
-            msgBox.setDefaultButton(QMessageBox::Ok);
-            msgBox.exec();
-        })
+                               msgBox.setStandardButtons(QMessageBox::Ok);
+                               msgBox.setDefaultButton(QMessageBox::Ok);
+                               msgBox.exec();
+                           })
     ADD_FUNCTION_TO_PLUGIN(gui_savescreenshotmemory,
                            [](void* ctx, uint64_t* size, const char* format) -> uint8_t* {
                                Plugin* self = (Plugin*)ctx;
