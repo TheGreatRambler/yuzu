@@ -209,6 +209,8 @@ bool PluginManager::LoadPlugin(std::string path) {
         setup();
 
         plugins.push_back(plugin);
+
+        LOG_INFO(Plugin, ("Plugin " + path + " successfully loaded").c_str());
     }
 
     return true;

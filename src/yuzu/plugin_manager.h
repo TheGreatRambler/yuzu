@@ -6,7 +6,6 @@
 
 #include <functional>
 #include <QDialog>
-#include <QFileSystemWatcher>
 
 class QHBoxLayout;
 class QListWidget;
@@ -32,7 +31,7 @@ private:
 
     QListWidget* plugin_list;
     QPushButton* refresh_button;
-    QFileSystemWatcher filesystem_watcher;
+    QFileSystemWatcher* filesystem_watcher;
 
     QVBoxLayout* main_layout;
 };

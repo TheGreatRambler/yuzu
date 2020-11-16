@@ -5,6 +5,7 @@
 #include <QCoreApplication>
 #include <QDirIterator>
 #include <QFileDialog>
+#include <QFileSystemWatcher>
 #include <QHBoxLayout>
 #include <QListWidget>
 #include <QPushButton>
@@ -31,8 +32,10 @@ PluginDialog::PluginDialog(QWidget* parent) : QDialog(parent) {
     refresh_button = new QPushButton(QStringLiteral("Refresh list"), this);
     refresh_button->setObjectName(QStringLiteral("RefreshButton"));
 
+    filesystem_watcher = new QFileSystemWatcher(this);
+
     connect(refresh_button, &QPushButton::clicked, this, [this]() {
-        filesystem_watcher.addPath(plugins_path);
+        // filesystem_watcher->addPath(plugins_path);
         updateAvailablePlugins();
     });
 
@@ -43,9 +46,9 @@ PluginDialog::PluginDialog(QWidget* parent) : QDialog(parent) {
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
     setWindowTitle(QStringLiteral("Plugin Manager"));
 
-    filesystem_watcher.addPath(plugins_path);
+    filesystem_watcher->addPath(plugins_path);
 
-    QObject::connect(&filesystem_watcher, &QFileSystemWatcher::directoryChanged, this,
+    QObject::connect(filesystem_watcher, &QFileSystemWatcher::directoryChanged, this,
                      [this] { updateAvailablePlugins(); });
     QObject::connect(plugin_list, &QListWidget::itemChanged, this,
                      &PluginDialog::pluginEnabledOrDisabled);
