@@ -149,6 +149,9 @@ void PluginManager::PluginThreadExecuter(std::shared_ptr<Plugin> plugin) {
             return;
         }
 
+        // Ensure hid applet is loaded if possible
+        EnsureHidAppletLoaded(plugin);
+
         // Call shared lib main loop function, should already be loaded
         plugin->mainLoopFunction();
 
@@ -233,8 +236,6 @@ bool PluginManager::LoadPlugin(std::string path) {
         loaded_plugins.insert(path);
 
         plugin->system = &system;
-        plugin->hidAppletResource =
-            system.ServiceManager().GetService<Service::HID::Hid>("hid")->GetAppletResource();
 
         setup();
 
@@ -265,6 +266,15 @@ void PluginManager::RegenerateGuiRendererIfNeeded() {
         guiPixmap->fill(0);
         guiPainter = new QPainter(guiPixmap);
         guiPainter->setWindow(guiPixmap->rect());
+    }
+}
+
+void PluginManager::EnsureHidAppletLoaded(std::shared_ptr<Plugin> plugin) {
+    if (!plugin->hidAppletResource &&
+        plugin->system->CurrentProcess()->GetStatus() == Kernel::ProcessStatus::Running) {
+        plugin->hidAppletResource = plugin->system->ServiceManager()
+                                        .GetService<Service::HID::Hid>("hid")
+                                        ->GetAppletResource();
     }
 }
 
@@ -1084,8 +1094,8 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                               PluginDefinitions::PopupType type) -> void {
                                Plugin* self = (Plugin*)ctx;
                                QMessageBox msgBox;
-                               msgBox.setText(QString::fromUtf8(title));
-                               msgBox.setInformativeText(QString::fromUtf8(message));
+                               msgBox.setWindowTitle(QString::fromUtf8(title));
+                               msgBox.setText(QString::fromUtf8(message));
 
                                if (type == PluginDefinitions::PopupType::Information) {
                                    msgBox.setIcon(QMessageBox::Information);

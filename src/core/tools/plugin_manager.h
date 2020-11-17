@@ -66,6 +66,27 @@ namespace Tools {
  */
 class PluginManager {
 public:
+    struct Plugin {
+        bool ready{false};
+        std::string path;
+        std::atomic_bool processedMainLoop{false};
+        std::atomic_bool encounteredVsync{false};
+        bool hasStopped{false};
+        std::mutex pluginMutex;
+        std::condition_variable pluginCv;
+        std::unique_ptr<std::thread> pluginThread{nullptr};
+        Tools::PluginManager* pluginManager;
+        std::shared_ptr<Service::HID::IAppletResource> hidAppletResource{nullptr};
+        Core::System* system{nullptr};
+        PluginDefinitions::meta_handle_main_loop* mainLoopFunction;
+#ifdef _WIN32
+        HMODULE sharedLibHandle;
+#endif
+#if defined(__linux__) || defined(__APPLE__)
+        void* sharedLibHandle;
+#endif
+    };
+
     explicit PluginManager(Core::System& system_);
     ~PluginManager();
 
@@ -120,27 +141,6 @@ public:
     std::function<QImage()> screenshot_callback;
 
 private:
-    struct Plugin {
-        bool ready{false};
-        std::string path;
-        std::atomic_bool processedMainLoop{false};
-        std::atomic_bool encounteredVsync{false};
-        bool hasStopped{false};
-        std::mutex pluginMutex;
-        std::condition_variable pluginCv;
-        std::unique_ptr<std::thread> pluginThread{nullptr};
-        Tools::PluginManager* pluginManager;
-        std::shared_ptr<Service::HID::IAppletResource> hidAppletResource{nullptr};
-        Core::System* system{nullptr};
-        PluginDefinitions::meta_handle_main_loop* mainLoopFunction;
-#ifdef _WIN32
-        HMODULE sharedLibHandle;
-#endif
-#if defined(__linux__) || defined(__APPLE__)
-        void* sharedLibHandle;
-#endif
-    };
-
     enum LastDockedState : uint8_t {
         Neither,
         Docked,
@@ -172,6 +172,8 @@ private:
     void ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin);
 
     void PluginThreadExecuter(std::shared_ptr<Plugin> plugin);
+
+    void EnsureHidAppletLoaded(std::shared_ptr<Plugin> plugin);
 
     std::atomic_bool active{false};
 

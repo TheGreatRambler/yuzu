@@ -34,11 +34,17 @@ PluginDialog::PluginDialog(QWidget* parent) : QDialog(parent) {
     refresh_button->setObjectName(QStringLiteral("RefreshButton"));
 
     filesystem_watcher = new QFileSystemWatcher(this);
+    filesystem_watcher->addPath(plugins_path);
 
-    connect(refresh_button, &QPushButton::clicked, this, [this]() {
+    QObject::connect(refresh_button, &QPushButton::clicked, this, [this]() {
         // filesystem_watcher->addPath(plugins_path);
         updateAvailablePlugins();
     });
+
+    QObject::connect(filesystem_watcher, &QFileSystemWatcher::directoryChanged, this,
+                     [this] { updateAvailablePlugins(); });
+    QObject::connect(plugin_list, &QListWidget::itemChanged, this,
+                     &PluginDialog::pluginEnabledOrDisabled);
 
     main_layout->addWidget(plugin_list);
     main_layout->addWidget(refresh_button);
@@ -46,13 +52,6 @@ PluginDialog::PluginDialog(QWidget* parent) : QDialog(parent) {
     setLayout(main_layout);
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
     setWindowTitle(QStringLiteral("Plugin Manager"));
-
-    filesystem_watcher->addPath(plugins_path);
-
-    QObject::connect(filesystem_watcher, &QFileSystemWatcher::directoryChanged, this,
-                     [this] { updateAvailablePlugins(); });
-    QObject::connect(plugin_list, &QListWidget::itemChanged, this,
-                     &PluginDialog::pluginEnabledOrDisabled);
 }
 
 PluginDialog::~PluginDialog() = default;
