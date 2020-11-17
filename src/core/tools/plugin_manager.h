@@ -4,27 +4,6 @@
 
 #pragma once
 
-#ifdef _WIN32
-#define ADD_FUNCTION_TO_PLUGIN(type, address)                                                      \
-    {                                                                                              \
-        PluginDefinitions::type** pointer =                                                        \
-            (PluginDefinitions::type**)GetProcAddress(plugin->sharedLibHandle, "yuzu_" #type);     \
-        if (pointer) {                                                                             \
-            *pointer = (PluginDefinitions::type*)address;                                          \
-        }                                                                                          \
-    }
-#endif
-#if defined(__linux__) || defined(__APPLE__)
-#define ADD_FUNCTION_TO_PLUGIN(type, address)                                                      \
-    {                                                                                              \
-        PluginDefinitions::type** pointer =                                                        \
-            (PluginDefinitions::type**)dlsym(plugin->sharedLibHandle, "yuzu_" #type);              \
-        if (pointer) {                                                                             \
-            *pointer = (PluginDefinitions::type*)address;                                          \
-        }                                                                                          \
-    }
-#endif
-
 #include <atomic>
 #include <condition_variable>
 #include <cstring>
@@ -37,6 +16,7 @@
 #include <thread>
 #include <vector>
 #include "common/common_types.h"
+#include "core/tools/plugin_definitions.h"
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -116,8 +96,9 @@ public:
     }
 
     std::string GetLastErrorString() {
-        return last_error;
+        std::string error = last_error;
         last_error = "";
+        return error;
     }
 
     void SetRenderCallback(std::function<void(const QImage& pixmap)> callback) {
@@ -151,6 +132,7 @@ private:
         Tools::PluginManager* pluginManager;
         std::shared_ptr<Service::HID::IAppletResource> hidAppletResource{nullptr};
         Core::System* system{nullptr};
+        PluginDefinitions::meta_handle_main_loop* mainLoopFunction;
 #ifdef _WIN32
         HMODULE sharedLibHandle;
 #endif

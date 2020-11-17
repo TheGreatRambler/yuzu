@@ -2,6 +2,27 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#ifdef _WIN32
+#define ADD_FUNCTION_TO_PLUGIN(type, address)                                                      \
+    {                                                                                              \
+        PluginDefinitions::type** pointer =                                                        \
+            (PluginDefinitions::type**)GetProcAddress(plugin->sharedLibHandle, "yuzu_" #type);     \
+        if (pointer) {                                                                             \
+            *pointer = (PluginDefinitions::type*)address;                                          \
+        }                                                                                          \
+    }
+#endif
+#if defined(__linux__) || defined(__APPLE__)
+#define ADD_FUNCTION_TO_PLUGIN(type, address)                                                      \
+    {                                                                                              \
+        PluginDefinitions::type** pointer =                                                        \
+            (PluginDefinitions::type**)dlsym(plugin->sharedLibHandle, "yuzu_" #type);              \
+        if (pointer) {                                                                             \
+            *pointer = (PluginDefinitions::type*)address;                                          \
+        }                                                                                          \
+    }
+#endif
+
 #include <QBuffer>
 #include <QByteArray>
 #include <QColor>
@@ -94,7 +115,11 @@ void PluginManager::ProcessScriptFromVsync() {
     }
 
     for (auto& plugin : temp_plugins_to_remove) {
-        GetDllFunction<PluginDefinitions::meta_handle_close>(*plugin, "onClose")();
+        PluginDefinitions::meta_handle_close* closeFunction =
+            GetDllFunction<PluginDefinitions::meta_handle_close>(*plugin, "on_close");
+        if (closeFunction) {
+            closeFunction();
+        }
         plugin->pluginThread->join();
 
 #ifdef _WIN32
@@ -125,8 +150,7 @@ void PluginManager::PluginThreadExecuter(std::shared_ptr<Plugin> plugin) {
         }
 
         // Call shared lib main loop function, should already be loaded
-        // Could be instead obtained once, TODO
-        GetDllFunction<PluginDefinitions::meta_handle_main_loop>(*plugin, "onMainLoop")();
+        plugin->mainLoopFunction();
 
         // Once the end of this function is reached, the main loop must have completed
         lk.unlock();
@@ -171,7 +195,7 @@ bool PluginManager::LoadPlugin(std::string path) {
 #endif
 
         if (!plugin->sharedLibHandle) {
-            last_error = "DLL error: " + GetLastDllError();
+            last_error = "DLL error " + GetLastDllError();
             return false;
         }
 
@@ -179,8 +203,11 @@ bool PluginManager::LoadPlugin(std::string path) {
             GetDllFunction<PluginDefinitions::meta_getplugininterfaceversion>(
                 *plugin, "get_plugin_interface_version");
 
-        if (!pluginVersion || pluginVersion() != PLUGIN_INTERFACE_VERSION) {
-            // The plugin is not compatible with this version of Yuzu
+        if (!pluginVersion) {
+            last_error = "The plugin needs the function 'get_plugin_interface_version' exported in "
+                         "order to run";
+            return false;
+        } else if (pluginVersion() != PLUGIN_INTERFACE_VERSION) {
             last_error = "Plugin version " + std::to_string(pluginVersion()) +
                          " is not compatible with Yuzu plugin version " +
                          std::to_string(PLUGIN_INTERFACE_VERSION);
@@ -188,15 +215,18 @@ bool PluginManager::LoadPlugin(std::string path) {
         }
 
         PluginDefinitions::meta_setup_plugin* setup =
-            GetDllFunction<PluginDefinitions::meta_setup_plugin>(*plugin, "startPlugin");
+            GetDllFunction<PluginDefinitions::meta_setup_plugin>(*plugin, "start");
 
         PluginDefinitions::meta_handle_main_loop* mainLoop =
-            GetDllFunction<PluginDefinitions::meta_handle_main_loop>(*plugin, "handleMainLoop");
+            GetDllFunction<PluginDefinitions::meta_handle_main_loop>(*plugin, "on_main_loop");
 
         if (!setup || !mainLoop) {
-            last_error = "The DLL lacks necessary functions to run";
+            last_error = "The plugin needs the functions 'start' and 'on_main_loop' exported in "
+                         "order to run";
             return false;
         }
+
+        plugin->mainLoopFunction = mainLoop;
 
         ConnectAllDllFunctions(plugin);
 

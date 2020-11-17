@@ -8,9 +8,11 @@
 #include <QFileSystemWatcher>
 #include <QHBoxLayout>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QShortcut>
 #include <QVBoxLayout>
+#include "common/logging/log.h"
 #include "core/core.h"
 #include "core/tools/plugin_manager.h"
 #include "yuzu/plugin_manager.h"
@@ -18,7 +20,6 @@
 
 PluginDialog::PluginDialog(QWidget* parent) : QDialog(parent) {
     plugins_path = QCoreApplication::applicationDirPath() + QStringLiteral("/yuzu_plugins/");
-    setAttribute(Qt::WA_DeleteOnClose);
 
     Core::System::GetInstance().PluginManager().SetPluginCallback(
         std::bind(&PluginDialog::updateAvailablePlugins, this));
@@ -65,7 +66,25 @@ void PluginDialog::pluginEnabledOrDisabled(QListWidgetItem* changed) {
     std::string path = QString(plugins_path + changed->text()).toStdString();
 
     if (checked) {
-        Core::System::GetInstance().PluginManager().LoadPlugin(path);
+        if (!Core::System::GetInstance().PluginManager().LoadPlugin(path)) {
+            // Error
+            std::string lastError =
+                Core::System::GetInstance().PluginManager().GetLastErrorString();
+            std::string message = "Plugin " + path + " was not loaded with error: " + lastError;
+
+            LOG_ERROR(Plugin, message.c_str());
+
+            QMessageBox msgBox;
+            msgBox.setText(QStringLiteral("Plugin loading error"));
+            msgBox.setInformativeText(QString::fromStdString(message));
+            msgBox.setIcon(QMessageBox::Warning);
+            msgBox.setStandardButtons(QMessageBox::Ok);
+            msgBox.setDefaultButton(QMessageBox::Ok);
+            msgBox.exec();
+
+            changed->setCheckState(Qt::Unchecked);
+        }
+
     } else {
         Core::System::GetInstance().PluginManager().RemovePlugin(path);
     }
