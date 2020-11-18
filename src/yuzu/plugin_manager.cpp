@@ -106,10 +106,16 @@ void PluginDialog::updateAvailablePlugins() {
             plugin_list->addItem(item);
         }
 
-        for (auto const& loadedPlugin :
-             Core::System::GetInstance().PluginManager().GetAllLoadedPlugins()) {
-            plugin_list->findItems(QString::fromStdString(loadedPlugin), Qt::MatchExactly)[0]
-                ->setCheckState(Qt::Checked);
+        auto const& loadedPlugins =
+            Core::System::GetInstance().PluginManager().GetAllLoadedPlugins();
+        for (auto const& loadedPlugin : loadedPlugins) {
+            auto const& foundItems = plugin_list->findItems(
+                QString::fromStdString(loadedPlugin).replace(plugins_path, QStringLiteral("")),
+                Qt::MatchExactly);
+            if (!foundItems.empty()) {
+                // Only one plugin should match the criteria
+                foundItems[0]->setCheckState(Qt::Checked);
+            }
         }
     }
 }
