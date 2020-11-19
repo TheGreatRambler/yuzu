@@ -74,18 +74,21 @@ void PluginDialog::pluginEnabledOrDisabled(QListWidgetItem* changed) {
             LOG_ERROR(Plugin, message.c_str());
 
             QMessageBox msgBox;
-            msgBox.setText(QStringLiteral("Plugin loading error"));
-            msgBox.setInformativeText(QString::fromStdString(message));
+            msgBox.setWindowTitle(QStringLiteral("Plugin Manager"));
+            msgBox.setText(QString::fromStdString(message));
             msgBox.setIcon(QMessageBox::Warning);
             msgBox.setStandardButtons(QMessageBox::Ok);
             msgBox.setDefaultButton(QMessageBox::Ok);
             msgBox.exec();
 
             changed->setCheckState(Qt::Unchecked);
+        } else {
+            LOG_INFO(Plugin, (changed->text().toStdString() + " successfully loaded").c_str());
         }
 
     } else {
         Core::System::GetInstance().PluginManager().RemovePlugin(path);
+        LOG_INFO(Plugin, (changed->text().toStdString() + " successfully removed").c_str());
     }
 }
 

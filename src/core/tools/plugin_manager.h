@@ -163,7 +163,7 @@ private:
         return (T*)GetProcAddress(plugin.sharedLibHandle, name.c_str());
 #endif
 #if defined(__linux__) || defined(__APPLE__)
-        return dlsym(plugin.sharedLibHandle, name.c_str());
+        return (T*)dlsym(plugin.sharedLibHandle, name.c_str());
 #endif
     }
 
