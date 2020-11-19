@@ -644,6 +644,7 @@ void ConfigureInputPlayer::RestoreDefaults() {
         motions_param[motion_id] = Common::ParamPackage{
             InputCommon::GenerateKeyboardParam(Config::default_motions[motion_id])};
     }
+
     UpdateUI();
     UpdateInputDevices();
     ui->comboControllerType->setCurrentIndex(0);

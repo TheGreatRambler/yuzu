@@ -111,8 +111,11 @@ public:
     [[nodiscard]] ButtonMapping GetButtonMappingForDevice(const Common::ParamPackage& device) const;
 
     /// Retrieves the motion mappings for the given device.
+    [[nodiscard]] MotionMapping GetMotionMappingForDevice(const Common::ParamPackage& device) const;
+
     /// Retrieves the underlying GameCube analog handler.
     [[nodiscard]] GCAnalogFactory* GetGCAnalogs();
+
     /// Retrieves the underlying GameCube analog handler.
     [[nodiscard]] const GCAnalogFactory* GetGCAnalogs() const;
 
