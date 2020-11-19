@@ -425,6 +425,9 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             case PluginDefinitions::LogLevel::Error:
                 LOG_ERROR(Plugin, logMessage);
                 break;
+            case PluginDefinitions::LogLevel::Trace:
+                LOG_TRACE(Plugin, logMessage);
+                break;
             }
         })
     ADD_FUNCTION_TO_PLUGIN(
@@ -461,9 +464,8 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                     self->hidAppletResource->GetController<Service::HID::Controller_NPad>(
                         Service::HID::HidController::NPad);
                 return npad.GetRawHandle((uint32_t)player).pad_states.raw;
-            } else {
-                return 0;
             }
+            return 0;
         })
     ADD_FUNCTION_TO_PLUGIN(
         joypad_set,
@@ -497,9 +499,8 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 case PluginDefinitions::YuzuJoystickType::RightY:
                     return handle.r_stick.y;
                 }
-            } else {
-                return 0;
             }
+            return 0;
         })
     ADD_FUNCTION_TO_PLUGIN(
         joypad_setjoystick,
@@ -585,9 +586,8 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 case PluginDefinitions::SixAxisMotionTypes::DirectionZZ:
                     return handle.orientation[2].z;
                 }
-            } else {
-                return 0.0f;
             }
+            return 0.0f;
         })
     ADD_FUNCTION_TO_PLUGIN(
         joypad_setsixaxis,
@@ -704,23 +704,19 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                                         Settings::values.players[index].connected);
             }
         })
-    ADD_FUNCTION_TO_PLUGIN(
-        joypad_getjoypadtype,
-        [](void* ctx,
-           PluginDefinitions::ControllerNumber player) -> PluginDefinitions::ControllerType {
-            Plugin* self = (Plugin*)ctx;
-            if (self->hidAppletResource) {
-                Service::HID::Controller_NPad& npad =
-                    self->hidAppletResource->GetController<Service::HID::Controller_NPad>(
-                        Service::HID::HidController::NPad);
-                size_t index = (size_t)player;
-                return (PluginDefinitions::ControllerType)
-                    Service::HID::Controller_NPad::MapSettingsTypeToNPad(
-                        Settings::values.players[index].controller_type);
-            } else {
-                return PluginDefinitions::ControllerType::None;
-            }
-        })
+    ADD_FUNCTION_TO_PLUGIN(joypad_getjoypadtype,
+                           [](void* ctx, PluginDefinitions::ControllerNumber player)
+                               -> PluginDefinitions::ControllerType {
+                               Plugin* self = (Plugin*)ctx;
+                               if (self->hidAppletResource) {
+                                   size_t index = (size_t)player;
+                                   return (PluginDefinitions::ControllerType)
+                                       Service::HID::Controller_NPad::MapSettingsTypeToNPad(
+                                           Settings::values.players[index].controller_type);
+                               } else {
+                                   return PluginDefinitions::ControllerType::None;
+                               }
+                           })
     ADD_FUNCTION_TO_PLUGIN(joypad_isjoypadconnected,
                            [](void* ctx, PluginDefinitions::ControllerNumber player) -> uint8_t {
                                return Settings::values.players[(size_t)player].connected;
@@ -770,9 +766,8 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                         Service::HID::HidController::Keyboard);
                 auto& handle = keyboard.GetRawHandle();
                 return handle.key[corrected_key / 8] & (1ULL << (corrected_key % 8));
-            } else {
-                return 0;
             }
+            return 0;
         })
     ADD_FUNCTION_TO_PLUGIN(
         input_setkeypressed,
@@ -802,9 +797,8 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                         Service::HID::HidController::Keyboard);
                 auto& handle = keyboard.GetRawHandle();
                 return handle.modifier & BIT(corrected_modifier);
-            } else {
-                return 0;
             }
+            return 0;
         })
     ADD_FUNCTION_TO_PLUGIN(
         input_setkeymodifierpressed,
@@ -841,9 +835,8 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                     Service::HID::HidController::Keyboard);
             auto& handle = keyboard.GetRawHandle();
             return handle.modifier;
-        } else {
-            return 0;
         }
+        return 0;
     })
     ADD_FUNCTION_TO_PLUGIN(input_getmouseraw, [](void* ctx) -> int32_t {
         Plugin* self = (Plugin*)ctx;
@@ -853,9 +846,8 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                     Service::HID::HidController::Mouse);
             auto& handle = mouse.GetRawHandle();
             return handle.button;
-        } else {
-            return 0;
         }
+        return 0;
     })
     ADD_FUNCTION_TO_PLUGIN(input_setkeyraw, [](void* ctx, void* mem) -> void {
         Plugin* self = (Plugin*)ctx;
@@ -897,9 +889,8 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                         Service::HID::HidController::Mouse);
                 auto& handle = mouse.GetRawHandle();
                 return handle.button & BIT(corrected_button);
-            } else {
-                return 0;
             }
+            return 0;
         })
     ADD_FUNCTION_TO_PLUGIN(
         input_setmousepressed,
@@ -927,6 +918,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             auto& handle = touchscreen.GetRawHandle();
             return handle.entry_count;
         }
+        return 0;
     })
     ADD_FUNCTION_TO_PLUGIN(input_setnumtouches, [](void* ctx, uint8_t num) -> void {
         Plugin* self = (Plugin*)ctx;
@@ -961,9 +953,8 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 default:
                     break;
                 }
-            } else {
-                return 0;
             }
+            return 0;
         })
     ADD_FUNCTION_TO_PLUGIN(
         input_settouch,
@@ -1052,6 +1043,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                     break;
                 }
             }
+            return 0;
         })
     ADD_FUNCTION_TO_PLUGIN(
         input_enableoutsideinput,
