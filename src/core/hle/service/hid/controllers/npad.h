@@ -340,13 +340,6 @@ private:
         };
     };
 
-    struct MotionDevice {
-        Common::Vec3f accel;
-        Common::Vec3f gyro;
-        Common::Vec3f rotation;
-        std::array<Common::Vec3f, 3> orientation;
-    };
-
     struct NPadEntry {
         NPadType joy_styles;
         NPadAssignments pad_assignment;
