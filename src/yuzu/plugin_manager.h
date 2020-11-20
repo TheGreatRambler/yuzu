@@ -12,6 +12,7 @@ class QListWidget;
 class QVBoxLayout;
 class QPushButton;
 class QListWidgetItem;
+class QCheckBox;
 
 class PluginDialog : public QDialog {
     Q_OBJECT
@@ -23,14 +24,15 @@ public:
     void SignalClose();
 
 private:
-    void pluginEnabledOrDisabled(QListWidgetItem* changed);
+    void PluginEnabledOrDisabled(QListWidgetItem* changed);
 
-    void updateAvailablePlugins();
+    void UpdateAvailablePlugins();
 
     QString plugins_path;
 
     QListWidget* plugin_list;
     QPushButton* refresh_button;
+    QCheckBox* plugins_enabled;
     QFileSystemWatcher* filesystem_watcher;
 
     QVBoxLayout* main_layout;

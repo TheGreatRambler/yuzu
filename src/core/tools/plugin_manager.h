@@ -5,12 +5,12 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstring>
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <set>
 #include <string>
 #include <thread>
@@ -65,11 +65,12 @@ namespace Tools {
  * compiling it into the emulator itself
  */
 class PluginManager {
+
 public:
     struct Plugin {
         bool ready{false};
         std::string path;
-        std::atomic_bool processedMainLoop{false};
+        std::atomic_bool processedMainLoop{true};
         std::atomic_bool encounteredVsync{false};
         bool hasStopped{false};
         std::mutex pluginMutex;
@@ -97,20 +98,28 @@ public:
     bool IsActive() const;
 
     void ProcessScriptFromVsync();
+    // Done during the course of the emulator (especially when a game is closed)
+    void ProcessScriptFromMainLoop();
 
     bool LoadPlugin(std::string path);
 
     void RemovePlugin(std::string path) {
+        std::lock_guard lock{plugins_mutex};
+
         if (IsPluginLoaded(path)) {
             loaded_plugins.erase(std::find(loaded_plugins.begin(), loaded_plugins.end(), path));
         }
     }
 
     bool IsPluginLoaded(std::string path) {
+        std::lock_guard lock{plugins_mutex};
+
         return loaded_plugins.count(path);
     }
 
     const std::set<std::string>& GetAllLoadedPlugins() {
+        std::lock_guard lock{plugins_mutex};
+
         return loaded_plugins;
     }
 
@@ -134,6 +143,8 @@ public:
 
     void RegenerateGuiRendererIfNeeded();
     void RenderGui() {
+        std::lock_guard lock{plugins_mutex};
+
         if (render_callback) {
             render_callback(*guiPixmap);
         }
@@ -186,6 +197,8 @@ private:
 
     void EnsureHidAppletLoaded(std::shared_ptr<Plugin> plugin);
 
+    void HandlePluginClosings();
+
     std::atomic_bool active{false};
 
     std::vector<std::shared_ptr<Plugin>> plugins;
@@ -199,6 +212,11 @@ private:
     LastDockedState lastDockedState{LastDockedState::Neither};
     QImage* guiPixmap;
     std::function<void(const QImage& pixmap)> render_callback;
+
+    mutable std::mutex plugins_mutex;
+
+    std::unique_ptr<std::thread> plugin_main_loop_thread{nullptr};
+    std::atomic_bool run_main_loop_thread{true};
 
     Core::System& system;
     Core::Timing::CoreTiming& core_timing;

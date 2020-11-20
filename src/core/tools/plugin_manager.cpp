@@ -57,15 +57,30 @@
 #include "core/tools/plugin_manager.h"
 #include "video_core/renderer_base.h"
 
-namespace Tools {
-PluginManager::PluginManager(Core::System& system_)
-    : system{system_}, core_timing{system.CoreTiming()}, memory{system.Memory()} {}
+#undef CreateEvent
 
-PluginManager::~PluginManager() {}
+namespace Tools {
+constexpr auto plugin_manager_ns = std::chrono::nanoseconds{1000000000 / 60};
+
+PluginManager::PluginManager(Core::System& system_)
+    : system{system_}, core_timing{system.CoreTiming()}, memory{system.Memory()} {
+    plugin_main_loop_thread = std::make_unique<std::thread>([&]() {
+        std::this_thread::sleep_for(plugin_manager_ns);
+        while (run_main_loop_thread.load(std::memory_order_relaxed)) {
+            if (IsActive()) {
+                ProcessScriptFromMainLoop();
+            }
+        }
+    });
+}
+
+PluginManager::~PluginManager() {
+    run_main_loop_thread = false;
+    plugin_main_loop_thread->join();
+}
 
 void PluginManager::SetActive(bool active) {
     if (!this->active.exchange(active)) {
-        loaded_plugins.clear();
     }
 }
 
@@ -74,18 +89,27 @@ bool PluginManager::IsActive() const {
 }
 
 void PluginManager::ProcessScript(std::shared_ptr<Plugin> plugin) {
+    if (!plugin->pluginThread) {
+        // Make thread if not started yet, will start waiting
+        plugin->pluginThread =
+            std::make_unique<std::thread>(&PluginManager::PluginThreadExecuter, this, plugin);
+    }
+
     {
         std::lock_guard<std::mutex> lk(plugin->pluginMutex);
         plugin->ready = true;
     }
+    // Signal thread it may start
     plugin->pluginCv.notify_one();
 
     {
-        // Gain back control
+        // Wait for thread to finish momentarily
         std::unique_lock<std::mutex> lk(plugin->pluginMutex);
         plugin->pluginCv.wait(
             lk, [plugin] { return plugin->processedMainLoop || plugin->encounteredVsync; });
 
+        // Check if the PluginManager has been told to unload the plugin
+        // Can only unload on main loop boundaries
         if (plugin->processedMainLoop.load(std::memory_order_relaxed) &&
             loaded_plugins.find(plugin->path) == loaded_plugins.end()) {
             plugin->hasStopped = true;
@@ -95,46 +119,46 @@ void PluginManager::ProcessScript(std::shared_ptr<Plugin> plugin) {
 }
 
 void PluginManager::ProcessScriptFromVsync() {
-    temp_plugins_to_remove.clear();
+    if (IsActive()) {
+        std::lock_guard lock{plugins_mutex};
 
-    for (auto& plugin : plugins) {
-        if (plugin->pluginThread.get() == nullptr) {
-            plugin->pluginThread =
-                std::make_unique<std::thread>(&PluginManager::PluginThreadExecuter, this, plugin);
+        for (auto& plugin : plugins) {
+            if (plugin->encounteredVsync.load(std::memory_order_relaxed)) {
+                // Continue thread from the vsync event
+                plugin->encounteredVsync = false;
+
+                while (true) {
+                    // Run until another vsync boundary is found or the plugin is stopped
+                    // NOTE: This means the main loop will be repeated as many times as needed
+                    ProcessScript(plugin);
+
+                    if (plugin->encounteredVsync.load(std::memory_order_relaxed) ||
+                        plugin->hasStopped)
+                        break;
+                }
+            }
         }
 
-        if (plugin->encounteredVsync.load(std::memory_order_relaxed)) {
-            // Continue thread from the vsync event
-            plugin->encounteredVsync = false;
-
-            do {
-                ProcessScript(plugin);
-            } while (plugin->processedMainLoop.load(std::memory_order_relaxed) &&
-                     !plugin->hasStopped);
-        }
+        HandlePluginClosings();
     }
+}
 
-    for (auto& plugin : temp_plugins_to_remove) {
-        PluginDefinitions::meta_handle_close* closeFunction =
-            GetDllFunction<PluginDefinitions::meta_handle_close>(*plugin, "on_close");
-        if (closeFunction) {
-            closeFunction();
+void PluginManager::ProcessScriptFromMainLoop() {
+    if (IsActive()) {
+        std::lock_guard lock{plugins_mutex};
+
+        for (auto& plugin : plugins) {
+            if (plugin->processedMainLoop.load(std::memory_order_relaxed)) {
+                // Continue thread from the beginning of the main loop
+                plugin->processedMainLoop = false;
+
+                // Run only once. Regardless of the outcome,
+                // execution should be handed back to the emulator
+                ProcessScript(plugin);
+            }
         }
-        plugin->pluginThread->join();
 
-#ifdef _WIN32
-        FreeLibrary(plugin->sharedLibHandle);
-#endif
-#if defined(__linux__) || defined(__APPLE__)
-        dlclose(plugin->sharedLibHandle);
-#endif
-
-        // The plugin will now be freed
-        plugins.erase(std::find(plugins.begin(), plugins.end(), plugin));
-
-        if (plugin_list_update_callback) {
-            plugin_list_update_callback();
-        }
+        HandlePluginClosings();
     }
 }
 
@@ -185,6 +209,8 @@ std::string PluginManager::GetLastDllError() {
 }
 
 bool PluginManager::LoadPlugin(std::string path) {
+    std::lock_guard lock{plugins_mutex};
+
     if (!IsPluginLoaded(path)) {
         std::shared_ptr<Plugin> plugin = std::make_shared<Plugin>();
         plugin->path = path;
@@ -264,12 +290,42 @@ void PluginManager::RegenerateGuiRendererIfNeeded() {
 }
 
 void PluginManager::EnsureHidAppletLoaded(std::shared_ptr<Plugin> plugin) {
-    if (!plugin->hidAppletResource &&
-        plugin->system->CurrentProcess()->GetStatus() == Kernel::ProcessStatus::Running) {
-        plugin->hidAppletResource = plugin->system->ServiceManager()
-                                        .GetService<Service::HID::Hid>("hid")
-                                        ->GetAppletResource();
+    if (!plugin->hidAppletResource) {
+        // Process may not exist this early
+        Kernel::Process* current_process = plugin->system->CurrentProcess();
+        if (current_process && current_process->GetStatus() == Kernel::ProcessStatus::Running) {
+            plugin->hidAppletResource = plugin->system->ServiceManager()
+                                            .GetService<Service::HID::Hid>("hid")
+                                            ->GetAppletResource();
+        }
     }
+}
+
+void PluginManager::HandlePluginClosings() {
+    for (auto& plugin : temp_plugins_to_remove) {
+        PluginDefinitions::meta_handle_close* closeFunction =
+            GetDllFunction<PluginDefinitions::meta_handle_close>(*plugin, "on_close");
+        if (closeFunction) {
+            closeFunction();
+        }
+        plugin->pluginThread->join();
+
+#ifdef _WIN32
+        FreeLibrary(plugin->sharedLibHandle);
+#endif
+#if defined(__linux__) || defined(__APPLE__)
+        dlclose(plugin->sharedLibHandle);
+#endif
+
+        // The plugin will now be freed
+        plugins.erase(std::find(plugins.begin(), plugins.end(), plugin));
+
+        if (plugin_list_update_callback) {
+            plugin_list_update_callback();
+        }
+    }
+
+    temp_plugins_to_remove.clear();
 }
 
 void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
@@ -304,104 +360,102 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
         Plugin* self = (Plugin*)ctx;
         self->system->Run();
     })
+
     ADD_FUNCTION_TO_PLUGIN(emu_framecount, [](void* ctx) -> int32_t {
         Plugin* self = (Plugin*)ctx;
-        return self->system->Renderer().GetCurrentFrame();
+        if (self->system->IsPoweredOn())
+            return self->system->Renderer().GetCurrentFrame();
+        return 0;
     })
+
     ADD_FUNCTION_TO_PLUGIN(emu_fps, [](void* ctx) -> float {
         Plugin* self = (Plugin*)ctx;
-        return self->system->Renderer().GetCurrentFPS();
+        if (self->system->IsPoweredOn())
+            return self->system->Renderer().GetCurrentFPS();
+        return 0.0f;
     })
+
     ADD_FUNCTION_TO_PLUGIN(emu_emulating, [](void* ctx) -> uint8_t {
         Plugin* self = (Plugin*)ctx;
         Kernel::Process* process = self->system->CurrentProcess();
-        if (!process) {
-            return false;
-        } else {
+        if (process)
             return process->GetStatus() == Kernel::ProcessStatus::Running;
-        }
+        return false;
     })
+
     ADD_FUNCTION_TO_PLUGIN(emu_romname, [](void* ctx) -> char* {
         Plugin* self = (Plugin*)ctx;
         std::string name;
-        if (self->system->GetGameName(name) == Loader::ResultStatus::Success) {
+        if (self->system->GetGameName(name) == Loader::ResultStatus::Success)
             return GetAllocatedString(name);
-        } else {
-            return NULL;
-        }
+        return NULL;
     })
+
     ADD_FUNCTION_TO_PLUGIN(emu_getprogramid, [](void* ctx) -> uint64_t {
         Plugin* self = (Plugin*)ctx;
         uint64_t id;
-        if (self->system->GetAppLoader().ReadProgramId(id) == Loader::ResultStatus::Success) {
+        if (self->system->IsPoweredOn() &&
+            self->system->GetAppLoader().ReadProgramId(id) == Loader::ResultStatus::Success)
             return id;
-        } else {
-            return 0;
-        }
+        return 0;
     })
+
     ADD_FUNCTION_TO_PLUGIN(emu_getprocessid, [](void* ctx) -> uint64_t {
         Plugin* self = (Plugin*)ctx;
         Kernel::Process* process = self->system->CurrentProcess();
-        if (!process) {
-            return 0;
-        } else {
+        if (process)
             return process->GetProcessID();
-        }
+        return 0;
     })
+
     ADD_FUNCTION_TO_PLUGIN(emu_getheapstart, [](void* ctx) -> uint64_t {
         Plugin* self = (Plugin*)ctx;
         Kernel::Process* process = self->system->CurrentProcess();
-        if (!process) {
-            return 0;
-        } else {
+        if (process)
             return process->PageTable().GetHeapRegionStart();
-        }
+        return 0;
     })
+
     ADD_FUNCTION_TO_PLUGIN(emu_getheapsize, [](void* ctx) -> uint64_t {
         Plugin* self = (Plugin*)ctx;
         Kernel::Process* process = self->system->CurrentProcess();
-        if (!process) {
-            return 0;
-        } else {
+        if (process)
             return process->PageTable().GetHeapRegionSize();
-        }
+        return 0;
     })
+
     ADD_FUNCTION_TO_PLUGIN(emu_getmainstart, [](void* ctx) -> uint64_t {
         Plugin* self = (Plugin*)ctx;
         Kernel::Process* process = self->system->CurrentProcess();
-        if (!process) {
-            return 0;
-        } else {
-            return process->PageTable().GetAddressSpaceStart();
-        }
+        if (process)
+            process->PageTable().GetAddressSpaceStart();
+        return 0;
     })
+
     ADD_FUNCTION_TO_PLUGIN(emu_getmainsize, [](void* ctx) -> uint64_t {
         Plugin* self = (Plugin*)ctx;
         Kernel::Process* process = self->system->CurrentProcess();
-        if (!process) {
-            return 0;
-        } else {
-            return process->PageTable().GetAddressSpaceSize();
-        }
+        if (process)
+            process->PageTable().GetAddressSpaceSize();
+        return 0;
     })
+
     ADD_FUNCTION_TO_PLUGIN(emu_getstackstart, [](void* ctx) -> uint64_t {
         Plugin* self = (Plugin*)ctx;
         Kernel::Process* process = self->system->CurrentProcess();
-        if (!process) {
-            return 0;
-        } else {
+        if (process)
             return process->PageTable().GetStackRegionStart();
-        }
+        return 0;
     })
+
     ADD_FUNCTION_TO_PLUGIN(emu_getstacksize, [](void* ctx) -> uint64_t {
         Plugin* self = (Plugin*)ctx;
         Kernel::Process* process = self->system->CurrentProcess();
-        if (!process) {
-            return 0;
-        } else {
+        if (process)
             return process->PageTable().GetStackRegionSize();
-        }
+        return 0;
     })
+
     ADD_FUNCTION_TO_PLUGIN(
         emu_log, [](void* ctx, const char* logMessage, PluginDefinitions::LogLevel level) -> void {
             // TODO send to correct channels
@@ -426,32 +480,45 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 break;
             }
         })
+
     ADD_FUNCTION_TO_PLUGIN(
         memory_readbyterange,
         [](void* ctx, uint64_t address, uint8_t* bytes, uint64_t length) -> uint8_t {
             Plugin* self = (Plugin*)ctx;
             Core::Memory::Memory& memoryInstance = self->system->Memory();
-            memoryInstance.ReadBlock(address, bytes, length);
-            // For now, can't tell if the process was successful
-            return true;
+            if (self->system->IsPoweredOn()) {
+                memoryInstance.ReadBlock(address, bytes, length);
+                return true;
+            }
+            return false;
         })
+
     ADD_FUNCTION_TO_PLUGIN(
         memory_writebyterange,
         [](void* ctx, uint64_t address, uint8_t* bytes, uint64_t length) -> uint8_t {
             Plugin* self = (Plugin*)ctx;
             Core::Memory::Memory& memoryInstance = self->system->Memory();
-            memoryInstance.WriteBlock(address, bytes, length);
-            // For now, can't tell if the process was successful
-            return true;
+            if (self->system->IsPoweredOn()) {
+                memoryInstance.WriteBlock(address, bytes, length);
+                return true;
+            }
+            return false;
         })
+
     ADD_FUNCTION_TO_PLUGIN(debugger_getclockticks, [](void* ctx) -> uint64_t {
         Plugin* self = (Plugin*)ctx;
-        return self->system->CoreTiming().GetClockTicks();
+        if (self->system->IsPoweredOn())
+            return self->system->CoreTiming().GetClockTicks();
+        return 0;
     })
+
     ADD_FUNCTION_TO_PLUGIN(debugger_getcputicks, [](void* ctx) -> uint64_t {
         Plugin* self = (Plugin*)ctx;
-        return self->system->CoreTiming().GetCPUTicks();
+        if (self->system->IsPoweredOn())
+            return self->system->CoreTiming().GetCPUTicks();
+        return 0;
     })
+
     ADD_FUNCTION_TO_PLUGIN(
         joypad_read, [](void* ctx, PluginDefinitions::ControllerNumber player) -> uint64_t {
             Plugin* self = (Plugin*)ctx;
@@ -463,6 +530,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             }
             return 0;
         })
+
     ADD_FUNCTION_TO_PLUGIN(
         joypad_set,
         [](void* ctx, PluginDefinitions::ControllerNumber player, uint64_t input) -> void {
@@ -474,6 +542,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 npad.GetRawHandle((uint32_t)player).pad_states.raw = input;
             }
         })
+
     ADD_FUNCTION_TO_PLUGIN(
         joypad_readjoystick,
         [](void* ctx, PluginDefinitions::ControllerNumber player,
@@ -498,6 +567,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             }
             return 0;
         })
+
     ADD_FUNCTION_TO_PLUGIN(
         joypad_setjoystick,
         [](void* ctx, PluginDefinitions::ControllerNumber player,
@@ -524,6 +594,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 }
             }
         })
+
     ADD_FUNCTION_TO_PLUGIN(
         joypad_readsixaxis,
         [](void* ctx, PluginDefinitions::ControllerNumber player,
@@ -585,6 +656,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             }
             return 0.0f;
         })
+
     ADD_FUNCTION_TO_PLUGIN(
         joypad_setsixaxis,
         [](void* ctx, PluginDefinitions::ControllerNumber player,
@@ -662,6 +734,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 }
             }
         })
+
     ADD_FUNCTION_TO_PLUGIN(
         joypad_enablejoypad,
         [](void* ctx, PluginDefinitions::ControllerNumber player, uint8_t enable) -> void {
@@ -676,6 +749,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 npad.UpdateControllerAt(type, (size_t)player, enable);
             }
         })
+
     ADD_FUNCTION_TO_PLUGIN(joypad_removealljoypads, [](void* ctx) -> void {
         Plugin* self = (Plugin*)ctx;
         if (self->hidAppletResource) {
@@ -685,6 +759,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             npad.DisconnectAllConnectedControllers();
         }
     })
+
     ADD_FUNCTION_TO_PLUGIN(
         joypad_setjoypadtype,
         [](void* ctx, PluginDefinitions::ControllerNumber player,
@@ -700,6 +775,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                                         Settings::values.players[index].connected);
             }
         })
+
     ADD_FUNCTION_TO_PLUGIN(joypad_getjoypadtype,
                            [](void* ctx, PluginDefinitions::ControllerNumber player)
                                -> PluginDefinitions::ControllerType {
@@ -713,10 +789,12 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                                    return PluginDefinitions::ControllerType::None;
                                }
                            })
+
     ADD_FUNCTION_TO_PLUGIN(joypad_isjoypadconnected,
                            [](void* ctx, PluginDefinitions::ControllerNumber player) -> uint8_t {
                                return Settings::values.players[(size_t)player].connected;
                            })
+
     ADD_FUNCTION_TO_PLUGIN(input_requeststateupdate, [](void* ctx) -> void {
         Plugin* self = (Plugin*)ctx;
         if (self->hidAppletResource) {
@@ -743,15 +821,19 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             mouse.RequestMouseStateUpdate();
         }
     })
+
     ADD_FUNCTION_TO_PLUGIN(input_enablekeyboard, [](void* ctx, uint8_t enable) -> void {
         Settings::values.keyboard_enabled = enable;
     })
+
     ADD_FUNCTION_TO_PLUGIN(input_enablemouse, [](void* ctx, uint8_t enable) -> void {
         Settings::values.mouse_enabled = enable;
     })
+
     ADD_FUNCTION_TO_PLUGIN(input_enabletouchscreen, [](void* ctx, uint8_t enable) -> void {
         Settings::values.touchscreen.enabled = enable;
     })
+
     ADD_FUNCTION_TO_PLUGIN(
         input_iskeypressed, [](void* ctx, PluginDefinitions::KeyboardValues key) -> uint8_t {
             Plugin* self = (Plugin*)ctx;
@@ -765,6 +847,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             }
             return 0;
         })
+
     ADD_FUNCTION_TO_PLUGIN(
         input_setkeypressed,
         [](void* ctx, PluginDefinitions::KeyboardValues key, uint8_t ispressed) -> void {
@@ -782,6 +865,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 }
             }
         })
+
     ADD_FUNCTION_TO_PLUGIN(
         input_iskeymodifierpressed,
         [](void* ctx, PluginDefinitions::KeyboardModifiers modifier) -> uint8_t {
@@ -796,6 +880,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             }
             return 0;
         })
+
     ADD_FUNCTION_TO_PLUGIN(
         input_setkeymodifierpressed,
         [](void* ctx, PluginDefinitions::KeyboardModifiers modifier, uint8_t ispressed) -> void {
@@ -813,6 +898,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 }
             }
         })
+
     ADD_FUNCTION_TO_PLUGIN(input_getkeyraw, [](void* ctx, void* mem) -> void {
         Plugin* self = (Plugin*)ctx;
         if (self->hidAppletResource) {
@@ -823,6 +909,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             memcpy(mem, handle.key.data(), handle.key.size());
         }
     })
+
     ADD_FUNCTION_TO_PLUGIN(input_getkeymodifierraw, [](void* ctx) -> int32_t {
         Plugin* self = (Plugin*)ctx;
         if (self->hidAppletResource) {
@@ -834,6 +921,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
         }
         return 0;
     })
+
     ADD_FUNCTION_TO_PLUGIN(input_getmouseraw, [](void* ctx) -> int32_t {
         Plugin* self = (Plugin*)ctx;
         if (self->hidAppletResource) {
@@ -845,6 +933,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
         }
         return 0;
     })
+
     ADD_FUNCTION_TO_PLUGIN(input_setkeyraw, [](void* ctx, void* mem) -> void {
         Plugin* self = (Plugin*)ctx;
         if (self->hidAppletResource) {
@@ -855,6 +944,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             memcpy(handle.key.data(), mem, handle.key.size());
         }
     })
+
     ADD_FUNCTION_TO_PLUGIN(input_setkeymodifierraw, [](void* ctx, int32_t mem) -> void {
         Plugin* self = (Plugin*)ctx;
         if (self->hidAppletResource) {
@@ -865,6 +955,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             handle.modifier = mem;
         }
     })
+
     ADD_FUNCTION_TO_PLUGIN(input_setmouseraw, [](void* ctx, int32_t mem) -> void {
         Plugin* self = (Plugin*)ctx;
         if (self->hidAppletResource) {
@@ -875,6 +966,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             handle.button = mem;
         }
     })
+
     ADD_FUNCTION_TO_PLUGIN(
         input_ismousepressed, [](void* ctx, PluginDefinitions::MouseButton button) -> uint8_t {
             Plugin* self = (Plugin*)ctx;
@@ -888,6 +980,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             }
             return 0;
         })
+
     ADD_FUNCTION_TO_PLUGIN(
         input_setmousepressed,
         [](void* ctx, PluginDefinitions::MouseButton button, uint8_t ispressed) -> void {
@@ -905,6 +998,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 }
             }
         })
+
     ADD_FUNCTION_TO_PLUGIN(input_getnumtouches, [](void* ctx) -> uint8_t {
         Plugin* self = (Plugin*)ctx;
         if (self->hidAppletResource) {
@@ -916,6 +1010,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
         }
         return 0;
     })
+
     ADD_FUNCTION_TO_PLUGIN(input_setnumtouches, [](void* ctx, uint8_t num) -> void {
         Plugin* self = (Plugin*)ctx;
         if (self->hidAppletResource) {
@@ -926,6 +1021,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             handle.entry_count = num;
         }
     })
+
     ADD_FUNCTION_TO_PLUGIN(
         input_readtouch,
         [](void* ctx, uint8_t idx, PluginDefinitions::TouchTypes type) -> uint32_t {
@@ -952,6 +1048,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             }
             return 0;
         })
+
     ADD_FUNCTION_TO_PLUGIN(
         input_settouch,
         [](void* ctx, uint8_t idx, PluginDefinitions::TouchTypes type, uint32_t val) -> void {
@@ -982,6 +1079,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 }
             }
         })
+
     ADD_FUNCTION_TO_PLUGIN(
         input_movemouse, [](void* ctx, PluginDefinitions::MouseTypes type, int32_t val) -> void {
             Plugin* self = (Plugin*)ctx;
@@ -1014,6 +1112,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 }
             }
         })
+
     ADD_FUNCTION_TO_PLUGIN(
         input_readmouse, [](void* ctx, PluginDefinitions::MouseTypes type) -> int32_t {
             Plugin* self = (Plugin*)ctx;
@@ -1041,6 +1140,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             }
             return 0;
         })
+
     ADD_FUNCTION_TO_PLUGIN(
         input_enableoutsideinput,
         [](void* ctx, PluginDefinitions::EnableInputType typetoenable, uint8_t enable) -> void {
@@ -1110,35 +1210,47 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                 }
             }
         })
+
     ADD_FUNCTION_TO_PLUGIN(gui_getwidth, [](void* ctx) -> uint32_t {
         Plugin* self = (Plugin*)ctx;
         return self->system->Renderer().Settings().screenshot_framebuffer_layout.width;
     })
+
     ADD_FUNCTION_TO_PLUGIN(gui_getheight, [](void* ctx) -> uint32_t {
         Plugin* self = (Plugin*)ctx;
         return self->system->Renderer().Settings().screenshot_framebuffer_layout.height;
     })
+
     ADD_FUNCTION_TO_PLUGIN(gui_clearscreen, [](void* ctx) -> void {
         Plugin* self = (Plugin*)ctx;
-        self->pluginManager->RegenerateGuiRendererIfNeeded();
-        auto& painter = self->pluginManager->guiPainter;
-        painter->fillRect(QRectF(0, 0, painter->window().width(), painter->window().height()),
-                          Qt::GlobalColor::transparent);
+        if (self->system->IsPoweredOn()) {
+            self->pluginManager->RegenerateGuiRendererIfNeeded();
+            auto& painter = self->pluginManager->guiPainter;
+            painter->fillRect(QRectF(0, 0, painter->window().width(), painter->window().height()),
+                              Qt::GlobalColor::transparent);
+        }
     })
+
     ADD_FUNCTION_TO_PLUGIN(gui_render, [](void* ctx) -> void {
         Plugin* self = (Plugin*)ctx;
-        self->pluginManager->RegenerateGuiRendererIfNeeded();
-        self->pluginManager->RenderGui();
+        if (self->system->IsPoweredOn()) {
+            self->pluginManager->RegenerateGuiRendererIfNeeded();
+            self->pluginManager->RenderGui();
+        }
     })
+
     ADD_FUNCTION_TO_PLUGIN(gui_drawpixel,
                            [](void* ctx, uint32_t x, uint32_t y, uint8_t red, uint8_t green,
                               uint8_t blue, uint8_t alpha) -> void {
                                Plugin* self = (Plugin*)ctx;
-                               self->pluginManager->RegenerateGuiRendererIfNeeded();
-                               auto& painter = self->pluginManager->guiPainter;
-                               painter->setPen(QColor(red, green, blue, alpha));
-                               painter->drawPoint(x, y);
+                               if (self->system->IsPoweredOn()) {
+                                   self->pluginManager->RegenerateGuiRendererIfNeeded();
+                                   auto& painter = self->pluginManager->guiPainter;
+                                   painter->setPen(QColor(red, green, blue, alpha));
+                                   painter->drawPoint(x, y);
+                               }
                            })
+
     ADD_FUNCTION_TO_PLUGIN(gui_savescreenshotas, [](void* ctx, const char* path) -> bool {
         Plugin* self = (Plugin*)ctx;
         if (self->pluginManager->screenshot_callback) {
@@ -1150,15 +1262,19 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
             return false;
         }
     })
+
     ADD_FUNCTION_TO_PLUGIN(gui_drawimage,
                            [](void* ctx, int32_t dx, int32_t dy, const char* path, int32_t sx,
                               int32_t sy, int32_t sw, int32_t sh) -> void {
                                Plugin* self = (Plugin*)ctx;
-                               self->pluginManager->RegenerateGuiRendererIfNeeded();
-                               QImage image(path);
-                               auto& painter = self->pluginManager->guiPainter;
-                               painter->drawImage(dx, dy, image, sx, sy, sw, sh);
+                               if (self->system->IsPoweredOn()) {
+                                   self->pluginManager->RegenerateGuiRendererIfNeeded();
+                                   QImage image(path);
+                                   auto& painter = self->pluginManager->guiPainter;
+                                   painter->drawImage(dx, dy, image, sx, sy, sw, sh);
+                               }
                            })
+
     ADD_FUNCTION_TO_PLUGIN(gui_popup,
                            [](void* ctx, const char* title, const char* message,
                               PluginDefinitions::PopupType type) -> void {
@@ -1181,6 +1297,7 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
                                msgBox.setDefaultButton(QMessageBox::Ok);
                                msgBox.exec();
                            })
+
     ADD_FUNCTION_TO_PLUGIN(gui_savescreenshotmemory,
                            [](void* ctx, uint64_t* size, const char* format) -> uint8_t* {
                                Plugin* self = (Plugin*)ctx;
