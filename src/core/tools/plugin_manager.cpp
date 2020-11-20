@@ -177,10 +177,10 @@ std::string PluginManager::GetLastDllError() {
     std::string message(messageBuffer, size);
     LocalFree(messageBuffer);
 
-    return message;
+    return TrimString(message);
 #endif
 #if defined(__linux__) || defined(__APPLE__)
-    return std::string(dlerror());
+    return TrimString(std::string(dlerror()));
 #endif
 }
 
@@ -206,11 +206,7 @@ bool PluginManager::LoadPlugin(std::string path) {
             GetDllFunction<PluginDefinitions::meta_getplugininterfaceversion>(
                 *plugin, "get_plugin_interface_version");
 
-        if (!pluginVersion) {
-            last_error = "The plugin needs the function 'get_plugin_interface_version' exported in "
-                         "order to run";
-            return false;
-        } else if (pluginVersion() != PLUGIN_INTERFACE_VERSION) {
+        if (pluginVersion() != PLUGIN_INTERFACE_VERSION) {
             last_error = "Plugin version " + std::to_string(pluginVersion()) +
                          " is not compatible with Yuzu plugin version " +
                          std::to_string(PLUGIN_INTERFACE_VERSION);

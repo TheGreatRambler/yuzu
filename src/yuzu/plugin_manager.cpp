@@ -93,6 +93,7 @@ void PluginDialog::pluginEnabledOrDisabled(QListWidgetItem* changed) {
 }
 
 void PluginDialog::updateAvailablePlugins() {
+    static QString required_prefix = QStringLiteral("plugin_");
     if (QDir(plugins_path).exists()) {
         plugin_list->clear();
 
@@ -101,12 +102,17 @@ void PluginDialog::updateAvailablePlugins() {
                              QDir::Files, QDirIterator::Subdirectories);
         while (plugins.hasNext()) {
             QString available_path = plugins.next();
+            QString name = available_path.replace(plugins_path, QStringLiteral(""));
 
-            QListWidgetItem* item =
-                new QListWidgetItem(available_path.replace(plugins_path, QStringLiteral("")));
-            item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-            item->setCheckState(Qt::Unchecked);
-            plugin_list->addItem(item);
+            if (name.startsWith(required_prefix)) {
+                LOG_INFO(Plugin, (name.toStdString() + " starts with " +
+                                  required_prefix.toStdString() + ", is plugin")
+                                     .c_str());
+                QListWidgetItem* item = new QListWidgetItem(name);
+                item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+                item->setCheckState(Qt::Unchecked);
+                plugin_list->addItem(item);
+            }
         }
 
         auto const& loadedPlugins =

@@ -99,11 +99,13 @@ public:
     void ProcessScriptFromVsync();
 
     bool LoadPlugin(std::string path);
+
     void RemovePlugin(std::string path) {
         if (IsPluginLoaded(path)) {
             loaded_plugins.erase(std::find(loaded_plugins.begin(), loaded_plugins.end(), path));
         }
     }
+
     bool IsPluginLoaded(std::string path) {
         return loaded_plugins.count(path);
     }
@@ -155,6 +157,15 @@ private:
         std::copy(str.begin(), str.end(), buf);
         buf[str.size()] = '\0';
         return buf;
+    }
+
+    std::string TrimString(std::string& str) {
+        // Also removes periods
+        static char const* removeChars = "\n\r\t. ";
+        auto const& start = str.find_first_not_of(removeChars);
+        auto const& end = str.find_last_not_of(removeChars);
+
+        return start != std::string::npos ? str.substr(start, 1 + end - start) : std::string();
     }
 
     template <typename T>
