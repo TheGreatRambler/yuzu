@@ -28,6 +28,8 @@ assert_noinline_call(const Fn& fn) {
     exit(1); // Keeps GCC's mouth shut about this actually returning
 }
 
+// NEED TO REVERT WHEN DONE
+/*
 #define ASSERT(_a_)                                                                                \
     do                                                                                             \
         if (!(_a_)) {                                                                              \
@@ -41,6 +43,10 @@ assert_noinline_call(const Fn& fn) {
             assert_noinline_call([&] { LOG_CRITICAL(Debug, "Assertion Failed!\n" __VA_ARGS__); }); \
         }                                                                                          \
     while (0)
+*/
+
+#define ASSERT(_a_)
+#define ASSERT_MSG(_a_, ...)
 
 #define UNREACHABLE() assert_noinline_call([] { LOG_CRITICAL(Debug, "Unreachable code!"); })
 #define UNREACHABLE_MSG(...)                                                                       \

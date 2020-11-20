@@ -23,9 +23,9 @@ public:
     void SignalClose();
 
 private:
-    void pluginEnabledOrDisabled(QListWidgetItem* changed);
+    void PluginEnabledOrDisabled(QListWidgetItem* changed);
 
-    void updateAvailablePlugins();
+    void UpdateAvailablePlugins();
 
     QString plugins_path;
 

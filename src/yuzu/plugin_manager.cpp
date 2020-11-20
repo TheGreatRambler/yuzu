@@ -22,13 +22,13 @@ PluginDialog::PluginDialog(QWidget* parent) : QDialog(parent) {
     plugins_path = QCoreApplication::applicationDirPath() + QStringLiteral("/yuzu_plugins/");
 
     Core::System::GetInstance().PluginManager().SetPluginCallback(
-        std::bind(&PluginDialog::updateAvailablePlugins, this));
+        std::bind(&PluginDialog::UpdateAvailablePlugins, this));
 
     main_layout = new QVBoxLayout();
 
     plugin_list = new QListWidget(this);
     plugin_list->setObjectName(QStringLiteral("PluginList"));
-    updateAvailablePlugins();
+    UpdateAvailablePlugins();
 
     refresh_button = new QPushButton(QStringLiteral("Refresh list"), this);
     refresh_button->setObjectName(QStringLiteral("RefreshButton"));
@@ -37,14 +37,14 @@ PluginDialog::PluginDialog(QWidget* parent) : QDialog(parent) {
     filesystem_watcher->addPath(plugins_path);
 
     QObject::connect(refresh_button, &QPushButton::clicked, this, [this]() {
-        // filesystem_watcher->addPath(plugins_path);
-        updateAvailablePlugins();
+        // Just in case your system doesn't support file monitering
+        UpdateAvailablePlugins();
     });
 
     QObject::connect(filesystem_watcher, &QFileSystemWatcher::directoryChanged, this,
-                     [this] { updateAvailablePlugins(); });
+                     [this] { UpdateAvailablePlugins(); });
     QObject::connect(plugin_list, &QListWidget::itemChanged, this,
-                     &PluginDialog::pluginEnabledOrDisabled);
+                     &PluginDialog::PluginEnabledOrDisabled);
 
     main_layout->addWidget(plugin_list);
     main_layout->addWidget(refresh_button);
@@ -60,7 +60,7 @@ void PluginDialog::SignalClose() {
     Core::System::GetInstance().PluginManager().SetPluginCallback(nullptr);
 }
 
-void PluginDialog::pluginEnabledOrDisabled(QListWidgetItem* changed) {
+void PluginDialog::PluginEnabledOrDisabled(QListWidgetItem* changed) {
     bool checked = changed->checkState() == Qt::Checked;
     std::string path = QString(plugins_path + changed->text()).toStdString();
 
@@ -92,7 +92,7 @@ void PluginDialog::pluginEnabledOrDisabled(QListWidgetItem* changed) {
     }
 }
 
-void PluginDialog::updateAvailablePlugins() {
+void PluginDialog::UpdateAvailablePlugins() {
     static QString required_prefix = QStringLiteral("plugin_");
     if (QDir(plugins_path).exists()) {
         plugin_list->clear();
@@ -106,7 +106,7 @@ void PluginDialog::updateAvailablePlugins() {
 
             if (name.startsWith(required_prefix)) {
                 LOG_INFO(Plugin, (name.toStdString() + " starts with " +
-                                  required_prefix.toStdString() + ", is plugin")
+                                  required_prefix.toStdString() + ", is a plugin")
                                      .c_str());
                 QListWidgetItem* item = new QListWidgetItem(name);
                 item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
