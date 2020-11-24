@@ -183,7 +183,7 @@ void DebuggerBackend::Write(const Entry& entry) {
     SUB(Debug, GPU)                                                                                \
     SUB(Debug, Breakpoint)                                                                         \
     SUB(Debug, GDBStub)                                                                            \
-    CLS(Plugin)                                                                                    \
+    CLS(Plugin_Manager)                                                                            \
     CLS(Kernel)                                                                                    \
     SUB(Kernel, SVC)                                                                               \
     CLS(Service)                                                                                   \

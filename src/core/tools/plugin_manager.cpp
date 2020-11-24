@@ -57,30 +57,31 @@
 #include "core/tools/plugin_manager.h"
 #include "video_core/renderer_base.h"
 
-#undef CreateEvent
-
 namespace Tools {
-constexpr auto plugin_manager_ns = std::chrono::nanoseconds{1000000000 / 60};
+// Approximately every 4 frames
+constexpr auto plugin_manager_ns = std::chrono::nanoseconds{(1000000000 / 60) * 4};
 
 PluginManager::PluginManager(Core::System& system_)
-    : system{system_}, core_timing{system.CoreTiming()}, memory{system.Memory()} {
-    plugin_main_loop_thread = std::make_unique<std::thread>([&]() {
-        std::this_thread::sleep_for(plugin_manager_ns);
-        while (run_main_loop_thread.load(std::memory_order_relaxed)) {
-            if (IsActive()) {
-                ProcessScriptFromMainLoop();
-            }
-        }
-    });
-}
+    : system{system_}, core_timing{system.CoreTiming()}, memory{system.Memory()} {}
 
 PluginManager::~PluginManager() {
-    run_main_loop_thread = false;
-    plugin_main_loop_thread->join();
+    if (plugin_main_loop_thread) {
+        run_main_loop_thread = false;
+        plugin_main_loop_thread->join();
+    }
 }
 
-void PluginManager::SetActive(bool active) {
-    if (!this->active.exchange(active)) {
+void PluginManager::SetActive(bool active_) {
+    if (active.exchange(active_)) {
+        // Check if thread hasn't been created before and create it
+        if (!plugin_main_loop_thread) {
+            plugin_main_loop_thread = std::make_unique<std::thread>([&]() {
+                while (run_main_loop_thread.load(std::memory_order_relaxed)) {
+                    std::this_thread::sleep_for(plugin_manager_ns);
+                    ProcessScriptFromMainLoop();
+                }
+            });
+        }
     }
 }
 
@@ -208,12 +209,13 @@ std::string PluginManager::GetLastDllError() {
 #endif
 }
 
-bool PluginManager::LoadPlugin(std::string path) {
+bool PluginManager::LoadPlugin(std::string path, std::string name) {
     std::lock_guard lock{plugins_mutex};
 
-    if (!IsPluginLoaded(path)) {
+    if (!loaded_plugins.count(path)) {
         std::shared_ptr<Plugin> plugin = std::make_shared<Plugin>();
         plugin->path = path;
+        plugin->plugin_name = name;
 
 #ifdef _WIN32
         plugin->sharedLibHandle =
@@ -323,6 +325,8 @@ void PluginManager::HandlePluginClosings() {
         if (plugin_list_update_callback) {
             plugin_list_update_callback();
         }
+
+        LOG_INFO(Plugin_Manager, ("Plugin " + plugin->plugin_name + " has been closed").c_str());
     }
 
     temp_plugins_to_remove.clear();
@@ -458,25 +462,26 @@ void PluginManager::ConnectAllDllFunctions(std::shared_ptr<Plugin> plugin) {
 
     ADD_FUNCTION_TO_PLUGIN(
         emu_log, [](void* ctx, const char* logMessage, PluginDefinitions::LogLevel level) -> void {
-            // TODO send to correct channels
+            Plugin* self = (Plugin*)ctx;
+            std::string message = "Plugin " + self->plugin_name + ": " + std::string(logMessage);
             switch (level) {
             case PluginDefinitions::LogLevel::Info:
-                LOG_INFO(Plugin, logMessage);
+                LOG_INFO(Plugin_Manager, message.c_str());
                 break;
             case PluginDefinitions::LogLevel::Critical:
-                LOG_CRITICAL(Plugin, logMessage);
+                LOG_CRITICAL(Plugin_Manager, message.c_str());
                 break;
             case PluginDefinitions::LogLevel::Debug:
-                LOG_DEBUG(Plugin, logMessage);
+                LOG_DEBUG(Plugin_Manager, message.c_str());
                 break;
             case PluginDefinitions::LogLevel::Warning:
-                LOG_WARNING(Plugin, logMessage);
+                LOG_WARNING(Plugin_Manager, message.c_str());
                 break;
             case PluginDefinitions::LogLevel::Error:
-                LOG_ERROR(Plugin, logMessage);
+                LOG_ERROR(Plugin_Manager, message.c_str());
                 break;
             case PluginDefinitions::LogLevel::Trace:
-                LOG_TRACE(Plugin, logMessage);
+                LOG_TRACE(Plugin_Manager, message.c_str());
                 break;
             }
         })

@@ -28,7 +28,7 @@ private:
 
     void UpdateAvailablePlugins();
 
-    QString plugins_path;
+    std::string plugins_path;
 
     QListWidget* plugin_list;
     QPushButton* refresh_button;

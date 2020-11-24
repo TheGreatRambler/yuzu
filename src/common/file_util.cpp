@@ -704,6 +704,7 @@ const std::string& GetUserPath(UserPath path, const std::string& new_path) {
         paths.emplace(UserPath::DumpDir, user_path + DUMP_DIR DIR_SEP);
         paths.emplace(UserPath::ScreenshotsDir, user_path + SCREENSHOTS_DIR DIR_SEP);
         paths.emplace(UserPath::ShaderDir, user_path + SHADER_DIR DIR_SEP);
+        paths.emplace(UserPath::PluginDir, user_path + PLUGIN_DIR DIR_SEP);
         paths.emplace(UserPath::SysDataDir, user_path + SYSDATA_DIR DIR_SEP);
         paths.emplace(UserPath::KeysDir, user_path + KEYS_DIR DIR_SEP);
         // TODO: Put the logs in a better location for each OS

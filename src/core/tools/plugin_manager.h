@@ -70,6 +70,7 @@ public:
     struct Plugin {
         bool ready{false};
         std::string path;
+        std::string plugin_name;
         std::atomic_bool processedMainLoop{true};
         std::atomic_bool encounteredVsync{false};
         bool hasStopped{false};
@@ -92,7 +93,7 @@ public:
     ~PluginManager();
 
     // Enables or disables the entire plugin manager.
-    void SetActive(bool active);
+    void SetActive(bool active_);
 
     // Returns whether or not the plugin manager is active.
     bool IsActive() const;
@@ -101,7 +102,7 @@ public:
     // Done during the course of the emulator (especially when a game is closed)
     void ProcessScriptFromMainLoop();
 
-    bool LoadPlugin(std::string path);
+    bool LoadPlugin(std::string path, std::string name);
 
     void RemovePlugin(std::string path) {
         std::lock_guard lock{plugins_mutex};

@@ -34,6 +34,7 @@ enum class UserPath {
     DumpDir,
     ScreenshotsDir,
     ShaderDir,
+    PluginDir,
     SysDataDir,
     UserDir,
 };

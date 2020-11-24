@@ -37,6 +37,7 @@
 #define DUMP_DIR "dump"
 #define SCREENSHOTS_DIR "screenshots"
 #define SHADER_DIR "shader"
+#define PLUGIN_DIR "plugins"
 #define LOG_DIR "log"
 
 // Filenames

@@ -45,8 +45,13 @@ assert_noinline_call(const Fn& fn) {
     while (0)
 */
 
-#define ASSERT(_a_)
-#define ASSERT_MSG(_a_, ...)
+#define ASSERT(_a_)                                                                                \
+    if (!(_a_)) {                                                                                  \
+    }
+
+#define ASSERT_MSG(_a_, ...)                                                                       \
+    if (!(_a_)) {                                                                                  \
+    }
 
 #define UNREACHABLE() assert_noinline_call([] { LOG_CRITICAL(Debug, "Unreachable code!"); })
 #define UNREACHABLE_MSG(...)                                                                       \

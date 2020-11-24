@@ -13,6 +13,7 @@
 #include <QPushButton>
 #include <QShortcut>
 #include <QVBoxLayout>
+#include "common/file_util.h"
 #include "common/logging/log.h"
 #include "core/core.h"
 #include "core/tools/plugin_manager.h"
@@ -20,7 +21,12 @@
 #include "yuzu/uisettings.h"
 
 PluginDialog::PluginDialog(QWidget* parent) : QDialog(parent) {
-    plugins_path = QCoreApplication::applicationDirPath() + QStringLiteral("/yuzu_plugins/");
+    // Normalize path
+    plugins_path =
+        QDir::fromNativeSeparators(
+            QString::fromStdString(Common::FS::GetUserPath(Common::FS::UserPath::PluginDir)))
+            .toStdString();
+    Common::FS::CreateDir(plugins_path);
 
     Core::System::GetInstance().PluginManager().SetPluginCallback(
         std::bind(&PluginDialog::UpdateAvailablePlugins, this));
@@ -38,7 +44,7 @@ PluginDialog::PluginDialog(QWidget* parent) : QDialog(parent) {
     plugins_enabled->setObjectName(QStringLiteral("EnablePlugins"));
 
     filesystem_watcher = new QFileSystemWatcher(this);
-    filesystem_watcher->addPath(plugins_path);
+    filesystem_watcher->addPath(QString::fromStdString(plugins_path));
 
     QObject::connect(refresh_button, &QPushButton::clicked, this, [this]() {
         // Just in case your system doesn't support file monitering
@@ -49,8 +55,10 @@ PluginDialog::PluginDialog(QWidget* parent) : QDialog(parent) {
         Core::System::GetInstance().PluginManager().SetActive(plugins_enabled->isChecked());
     });
 
-    QObject::connect(filesystem_watcher, &QFileSystemWatcher::directoryChanged, this,
-                     [this] { UpdateAvailablePlugins(); });
+    QObject::connect(filesystem_watcher, &QFileSystemWatcher::directoryChanged, this, [this] {
+        LOG_DEBUG(Plugin_Manager, "Directory update detected, refreshing list");
+        UpdateAvailablePlugins();
+    });
     QObject::connect(plugin_list, &QListWidget::itemChanged, this,
                      &PluginDialog::PluginEnabledOrDisabled);
 
@@ -71,16 +79,18 @@ void PluginDialog::SignalClose() {
 
 void PluginDialog::PluginEnabledOrDisabled(QListWidgetItem* changed) {
     bool checked = changed->checkState() == Qt::Checked;
-    std::string path = QString(plugins_path + changed->text()).toStdString();
+    std::string plugin_name = changed->text().toStdString();
+    std::string path = plugins_path + plugin_name;
 
     if (checked) {
-        if (!Core::System::GetInstance().PluginManager().LoadPlugin(path)) {
+        if (!Core::System::GetInstance().PluginManager().LoadPlugin(path, plugin_name)) {
             // Error
-            std::string lastError =
+            std::string last_error =
                 Core::System::GetInstance().PluginManager().GetLastErrorString();
-            std::string message = "Plugin " + path + " was not loaded with error: " + lastError;
+            std::string message =
+                "Plugin " + plugin_name + " was not loaded with error: " + last_error;
 
-            LOG_ERROR(Plugin, message.c_str());
+            LOG_ERROR(Plugin_Manager, message.c_str());
 
             QMessageBox msgBox;
             msgBox.setWindowTitle(QStringLiteral("Plugin Manager"));
@@ -92,31 +102,33 @@ void PluginDialog::PluginEnabledOrDisabled(QListWidgetItem* changed) {
 
             changed->setCheckState(Qt::Unchecked);
         } else {
-            LOG_INFO(Plugin, (changed->text().toStdString() + " successfully loaded").c_str());
+            LOG_INFO(Plugin_Manager, (plugin_name + " successfully loaded").c_str());
         }
 
     } else {
         Core::System::GetInstance().PluginManager().RemovePlugin(path);
-        LOG_INFO(Plugin, (changed->text().toStdString() + " successfully removed").c_str());
+        LOG_INFO(Plugin_Manager, (plugin_name + " successfully removed").c_str());
     }
 }
 
 void PluginDialog::UpdateAvailablePlugins() {
     static QString required_prefix = QStringLiteral("plugin_");
-    if (QDir(plugins_path).exists()) {
+    if (Common::FS::Exists(plugins_path)) {
         plugin_list->clear();
 
-        QDirIterator plugins(plugins_path,
-                             QStringList() << QStringLiteral("*.dll") << QStringLiteral("*.so"),
+        QDirIterator plugins(QString::fromStdString(plugins_path),
+                             QStringList() << QStringLiteral("*.dll") << QStringLiteral("*.so")
+                                           << QStringLiteral("*.dylib"),
                              QDir::Files, QDirIterator::Subdirectories);
         while (plugins.hasNext()) {
-            QString available_path = plugins.next();
-            QString name = available_path.replace(plugins_path, QStringLiteral(""));
+            QString available_path = QDir::fromNativeSeparators(plugins.next());
+            QString name =
+                available_path.replace(QString::fromStdString(plugins_path), QStringLiteral(""));
 
             if (name.startsWith(required_prefix)) {
-                LOG_INFO(Plugin, (name.toStdString() + " starts with " +
-                                  required_prefix.toStdString() + ", is a plugin")
-                                     .c_str());
+                LOG_DEBUG(Plugin_Manager, (name.toStdString() + " starts with " +
+                                           required_prefix.toStdString() + ", is a plugin")
+                                              .c_str());
                 QListWidgetItem* item = new QListWidgetItem(name);
                 item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
                 item->setCheckState(Qt::Unchecked);
@@ -128,12 +140,15 @@ void PluginDialog::UpdateAvailablePlugins() {
             Core::System::GetInstance().PluginManager().GetAllLoadedPlugins();
         for (auto const& loadedPlugin : loadedPlugins) {
             auto const& foundItems = plugin_list->findItems(
-                QString::fromStdString(loadedPlugin).replace(plugins_path, QStringLiteral("")),
+                QString::fromStdString(loadedPlugin)
+                    .replace(QString::fromStdString(plugins_path), QStringLiteral("")),
                 Qt::MatchExactly);
             if (!foundItems.empty()) {
                 // Only one plugin should match the criteria
                 foundItems[0]->setCheckState(Qt::Checked);
             }
         }
+    } else {
+        LOG_INFO(Plugin_Manager, ("Plugin path " + plugins_path + " does not exist").c_str());
     }
 }
