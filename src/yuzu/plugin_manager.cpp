@@ -42,6 +42,8 @@ PluginDialog::PluginDialog(QWidget* parent) : QDialog(parent) {
 
     plugins_enabled = new QCheckBox(QStringLiteral("Enable plugins"), this);
     plugins_enabled->setObjectName(QStringLiteral("EnablePlugins"));
+    plugins_enabled->setChecked(
+        Core::System::GetInstance().PluginManager().IsActive() ? Qt::Checked : Qt::Unchecked);
 
     filesystem_watcher = new QFileSystemWatcher(this);
     filesystem_watcher->addPath(QString::fromStdString(plugins_path));
